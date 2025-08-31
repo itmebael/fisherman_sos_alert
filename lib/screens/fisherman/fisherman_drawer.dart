@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/strings.dart';
 import '../../constants/routes.dart';
+import '../../providers/auth_provider.dart';
 
 class FishermanDrawer extends StatelessWidget {
   const FishermanDrawer({Key? key}) : super(key: key);
@@ -38,10 +40,12 @@ class FishermanDrawer extends StatelessWidget {
               ),
             ),
             
+            // Menu Items
             Expanded(
               child: Container(
                 color: AppColors.drawerColor,
-                child: Column(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   children: [
                     _buildDrawerItem(
                       context,
@@ -55,14 +59,41 @@ class FishermanDrawer extends StatelessWidget {
                       title: AppStrings.news,
                       route: AppRoutes.fishermanNews,
                     ),
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.login,
-                      title: AppStrings.login,
-                      route: AppRoutes.login,
-                    ),
                   ],
                 ),
+              ),
+            ),
+
+            // Logout Button (matching admin drawer design)
+            Container(
+              margin: const EdgeInsets.all(12),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red, // Solid red background
+                  foregroundColor: Colors.white, // White text & icon
+                  minimumSize: const Size(double.infinity, 50), // Full width
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12), // Rounded corners
+                  ),
+                  elevation: 3, // Slight shadow to pop out
+                ),
+                icon: const Icon(Icons.logout, size: 22),
+                label: const Text(
+                  "Logout",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                onPressed: () async {
+                  // Call AuthProvider to logout
+                  await Provider.of<AuthProvider>(context, listen: false).logout();
+
+                  // Navigate to login screen
+                  if (context.mounted) {
+                    Navigator.pushReplacementNamed(context, AppRoutes.login);
+                  }
+                },
               ),
             ),
           ],
@@ -93,7 +124,7 @@ class FishermanDrawer extends StatelessWidget {
           child: Icon(
             icon,
             color: AppColors.whiteColor,
-            size: 24,
+            size: 20, // Adjusted to match admin drawer
           ),
         ),
         title: Text(

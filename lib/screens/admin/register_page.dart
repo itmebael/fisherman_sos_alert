@@ -93,11 +93,11 @@ class _RegisterPageState extends State<RegisterPage> {
 
       // Save to coastguards collection as required by Firestore rules
       await FirebaseFirestore.instance
-    .collection('users')
-    .doc(uid)
-    .collection('coastguards')
-    .doc(uid)
-    .set(coastguardData);
+        .collection('users')
+        .doc(uid)
+        .collection('coastguards')
+        .doc(uid)
+        .set(coastguardData);
 
       if (mounted) {
         _showSuccessDialog();
@@ -267,7 +267,7 @@ class _RegisterPageState extends State<RegisterPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Custom Header with Logo
+            // Custom Header with Logo (updated with actual images)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
@@ -286,54 +286,42 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  
-                  // Coast Guard Logo (placeholder)
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primaryColor,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.waves,
-                      color: AppColors.whiteColor,
-                      size: 28,
+                  // BantayDagat logo
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/img/logo.png',
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  
-                  // PCG Logo (placeholder)
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: const BoxDecoration(
-                      color: AppColors.sosButtonColor,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.security,
-                      color: AppColors.whiteColor,
-                      size: 28,
+                  const SizedBox(width: 8),
+                  // Coast Guard logo
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/img/coastguard.png',
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
                     ),
                   ),
                   const SizedBox(width: 16),
-                  
                   // App Title
                   const Expanded(
                     child: Text(
                       'BantayDagat',
                       style: TextStyle(
-                        fontSize: 24,
+                        fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+                        color: Color(0xFF13294B),
+                        fontFamily: 'Montserrat',
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            
+
             // Subtitle
             Container(
               width: double.infinity,

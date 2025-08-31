@@ -185,4 +185,9 @@ class AdminProvider with ChangeNotifier {
       user.userType == 'fisherman' && user.isActive
     ).toList();
   }
+
+  /// Returns the total number of successful rescues.
+  /// This counts SOS alerts with status "rescued".
+  int get totalRescued =>
+      _rescueNotifications.where((alert) => alert.status?.toLowerCase() == 'rescued').length;
 }

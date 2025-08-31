@@ -49,7 +49,6 @@ class AdminDrawer extends StatelessWidget {
                     _buildItem(context, Icons.notifications_active, 'Rescue Notifications', AppRoutes.rescueNotifications),
                     _buildItem(context, Icons.navigation, 'Navigation', AppRoutes.navigation),
                     _buildItem(context, Icons.assessment, 'Reports', AppRoutes.reports),
-                    _buildItem(context, Icons.settings, 'Settings', AppRoutes.settings),
                     _buildItem(context, Icons.person_add, 'Register', AppRoutes.register),
                   ],
                 ),

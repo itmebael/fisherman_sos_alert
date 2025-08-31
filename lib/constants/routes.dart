@@ -8,7 +8,6 @@ import '../screens/admin/users_page.dart';
 import '../screens/admin/rescue_notifications_page.dart';
 import '../screens/admin/navigation_page.dart';
 import '../screens/admin/reports_page.dart';
-import '../screens/admin/settings_page.dart';
 import '../screens/admin/register_page.dart';
 import '../screens/admin/users_registration_page.dart';
 
@@ -36,7 +35,6 @@ class AppRoutes {
     rescueNotifications: (context) => const RescueNotificationsPage(),
     navigation: (context) => const NavigationPage(),
     reports: (context) => const ReportsPage(),
-    settings: (context) => const SettingsPage(),
     register: (context) => const RegisterPage(),
     usersRegistration: (context) => const UsersRegistrationPage(),
   };

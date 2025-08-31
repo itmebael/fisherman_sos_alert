@@ -55,12 +55,20 @@ class _SplashScreenState extends State<SplashScreen>
       await authProvider.checkAuthStatus();
       
       if (mounted) {
-        if (authProvider.isLoggedIn && authProvider.currentUser != null && authProvider.currentUser!.userType == 'coastguard') {
-          // Only logged in coastguard users go to admin dashboard
-          Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);
+        // Check if user is logged in
+        if (authProvider.isLoggedIn && authProvider.currentUser != null) {
+          // User is logged in, navigate based on user type
+          if (authProvider.currentUser!.userType == 'coastguard') {
+            Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);
+          } else if (authProvider.currentUser!.userType == 'fisherman') {
+            Navigator.pushReplacementNamed(context, AppRoutes.fishermanHome);
+          } else {
+            // Unknown user type, go to login
+            Navigator.pushReplacementNamed(context, AppRoutes.login);
+          }
         } else {
-          // Everyone else (including non-logged in users) goes to fisherman home
-          Navigator.pushReplacementNamed(context, AppRoutes.fishermanHome);
+          // User is not logged in, go to login screen
+          Navigator.pushReplacementNamed(context, AppRoutes.login);
         }
       }
     }
