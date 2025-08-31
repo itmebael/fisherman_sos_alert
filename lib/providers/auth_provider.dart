@@ -11,6 +11,8 @@ class AuthProvider with ChangeNotifier {
   String? _errorMessage;
   User? _firebaseUser;
   bool _isAuthenticated = false;
+  String? _adminPassword;
+  String? get adminPassword => _adminPassword;
 
   // Getters
   UserModel? get currentUser => _currentUser;
@@ -37,7 +39,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   // Login
-  Future<bool> login(String email, String password) async {
+ Future<bool> login(String email, String password) async {
     try {
       _setLoading(true);
       _clearError();
@@ -47,6 +49,7 @@ class AuthProvider with ChangeNotifier {
         _currentUser = _authService.currentUser;
         _firebaseUser = _authService.firebaseUser;
         _isAuthenticated = true;
+        _adminPassword = password; // <--- STORE IT HERE
       }
 
       _setLoading(false);
@@ -58,6 +61,7 @@ class AuthProvider with ChangeNotifier {
       return false;
     }
   }
+
 
   // Web login (for fisherman accounts, if needed)
   Future<void> openWebLogin() async {

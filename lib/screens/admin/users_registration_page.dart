@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart'; // <-- for AuthProvider
 
 import '../../constants/colors.dart';
 import '../../widgets/common/custom_text_field.dart';
@@ -8,6 +9,7 @@ import '../../widgets/common/custom_button.dart';
 import '../../models/user_model.dart';
 import '../../models/boat_model.dart';
 import '../../utils/validators.dart';
+import '../../providers/auth_provider.dart' as my_auth; // <--- ALIAS your AuthProvider!
 
 class UsersRegistrationPage extends StatefulWidget {
   const UsersRegistrationPage({Key? key}) : super(key: key);
@@ -35,20 +37,10 @@ class _UsersRegistrationPageState extends State<UsersRegistrationPage> {
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
 
-  /// These should be securely set from your login/auth provider.
-  String? _adminEmail;
-  String? _adminPassword;
-
   @override
   void initState() {
     super.initState();
     _fetchNextUserId();
-
-    // Retrieve admin credentials from wherever you store them after admin login
-    // For example, if you use Provider or a global singleton:
-    // _adminEmail = AuthProvider.of(context, listen: false).adminEmail;
-    // _adminPassword = AuthProvider.of(context, listen: false).adminPassword;
-    // For demo/testing, you can prompt the admin for password just before registration.
   }
 
   Future<void> _fetchNextUserId() async {
@@ -81,44 +73,7 @@ class _UsersRegistrationPageState extends State<UsersRegistrationPage> {
     return nextId;
   }
 
-  Future<void> _promptForAdminPassword() async {
-    // This dialog will force the admin to enter their password before registration.
-    String? passwordInput;
-    await showDialog(
-      context: context,
-      builder: (ctx) {
-        final _pwController = TextEditingController();
-        return AlertDialog(
-          title: const Text("Confirm Admin Password"),
-          content: TextField(
-            controller: _pwController,
-            obscureText: true,
-            decoration: const InputDecoration(labelText: "Admin Password"),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-              },
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                passwordInput = _pwController.text;
-                Navigator.pop(ctx);
-              },
-              child: const Text("Confirm"),
-            ),
-          ],
-        );
-      },
-    );
-    if (passwordInput != null && passwordInput!.isNotEmpty) {
-      _adminPassword = passwordInput!;
-    }
-  }
-
-  /// Registration flow with admin re-auth, using admin's real credentials.
+  /// Registration flow with admin re-auth, using admin's real credentials from AuthProvider.
   Future<void> _registerUser() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -127,36 +82,30 @@ class _UsersRegistrationPageState extends State<UsersRegistrationPage> {
     });
 
     try {
-      // 1. Get admin email from current user (must be signed in as admin at this point)
-      final currentUser = FirebaseAuth.instance.currentUser;
-      _adminEmail = currentUser?.email;
-      if (_adminEmail == null) {
-        throw Exception("Unable to determine admin email. Please re-login.");
+      // Use alias to refer to your AuthProvider, not Firebase's internal one!
+      final authProvider = Provider.of<my_auth.AuthProvider>(context, listen: false);
+      final String? adminEmail = authProvider.firebaseUser?.email;
+      final String? adminPassword = authProvider.adminPassword; // <-- make sure it's a public getter!
+
+      if (adminEmail == null || adminPassword == null || adminPassword.isEmpty) {
+        throw Exception("Admin credentials not available. Please re-login as admin.");
       }
 
-      // 2. Prompt for admin password if not stored
-      if (_adminPassword == null || _adminPassword!.isEmpty) {
-        await _promptForAdminPassword();
-      }
-      if (_adminPassword == null || _adminPassword!.isEmpty) {
-        throw Exception("Registration cancelled: No admin password entered.");
-      }
-
-      // Step 3. Register the fisherman Auth user (this signs you in as fisherman)
+      // Step 1. Register the fisherman Auth user (this signs you in as fisherman)
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
       final fishermanUid = userCredential.user!.uid;
 
-      // Step 4. Immediately sign out and sign back in as admin
+      // Step 2. Immediately sign out and sign back in as admin
       await FirebaseAuth.instance.signOut();
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _adminEmail!,
-        password: _adminPassword!,
+        email: adminEmail,
+        password: adminPassword,
       );
 
-      // Step 5. Now, as admin, do the writes
+      // Step 3. Now, as admin, do the writes
       // Create boat if boat number is provided
       String? boatId;
       if (_boatNumberController.text.trim().isNotEmpty) {
