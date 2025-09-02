@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/strings.dart';
 import '../../constants/routes.dart';
 import '../admin/admin_drawer.dart';
-import '../../providers/admin_provider.dart';
-import '../../models/user_model.dart';
+import '../../services/database_service.dart';
+import '../../models/user_with_boat_model.dart';
+import '../../widgets/common/loading_widget.dart';
 import '../../utils/date_formatter.dart';
 
 class UsersPage extends StatefulWidget {
@@ -16,13 +16,8 @@ class UsersPage extends StatefulWidget {
 }
 
 class _UsersPageState extends State<UsersPage> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<AdminProvider>(context, listen: false).loadUsers();
-    });
-  }
+  final DatabaseService _databaseService = DatabaseService();
+  String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +47,7 @@ class _UsersPageState extends State<UsersPage> {
             const SizedBox(width: 16),
             // App title
             const Text(
-              "Boat Registered",
+              "BantayDagat",
               style: TextStyle(
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,
@@ -80,66 +75,161 @@ class _UsersPageState extends State<UsersPage> {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Consumer<AdminProvider>(
-              builder: (context, admin, _) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with search and register button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Users List',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
+                    const Text(
+                      'Users List',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final result = await Navigator.pushNamed(
+                          context, 
+                          AppRoutes.usersRegistration,
+                        );
+                        if (result == true) {
+                          setState(() {}); // Refresh the stream
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryColor,
+                        foregroundColor: AppColors.whiteColor,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            final result = await Navigator.pushNamed(
-                              context, 
-                              AppRoutes.usersRegistration,
-                            );
-                            if (result == true) {
-                              // Refresh the users list after successful registration
-                              admin.loadUsers();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryColor,
-                            foregroundColor: AppColors.whiteColor,
-                            elevation: 2,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          icon: const Icon(Icons.directions_boat, color: AppColors.whiteColor),
-                          label: const Text('Register Boat'),
+                      ),
+                      icon: const Icon(Icons.directions_boat, color: AppColors.whiteColor),
+                      label: const Text('Register Boat'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // Search bar
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: AppColors.whiteColor,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
+                    },
+                    decoration: const InputDecoration(
+                      hintText: 'Search by name, email, or boat number...',
+                      prefixIcon: Icon(Icons.search, color: AppColors.textSecondary),
+                      border: InputBorder.none,
+                      hintStyle: TextStyle(color: AppColors.textSecondary),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Users table
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.whiteColor,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 10,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.whiteColor,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
-                              blurRadius: 10,
-                              offset: const Offset(0, 6),
+                    child: StreamBuilder<List<UserWithBoatModel>>(
+                      stream: _databaseService.getAllUsersWithBoats(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  size: 64,
+                                  color: AppColors.errorColor,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Error loading users: ${snapshot.error}',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: AppColors.errorColor,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: _UsersTable(admin: admin),
-                      ),
+                          );
+                        }
+
+                        final users = snapshot.data ?? [];
+                        
+                        // Filter users based on search query
+                        final filteredUsers = _searchQuery.isEmpty 
+                            ? users 
+                            : users.where((userWithBoat) =>
+                                userWithBoat.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                                userWithBoat.user.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                                userWithBoat.boatNumber.toLowerCase().contains(_searchQuery.toLowerCase())
+                              ).toList();
+
+                        if (filteredUsers.isEmpty) {
+                          return const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.people_outline,
+                                  size: 64,
+                                  color: AppColors.textSecondary,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'No users found',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return _UsersTable(users: filteredUsers);
+                      },
                     ),
-                  ],
-                );
-              },
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -149,104 +239,132 @@ class _UsersPageState extends State<UsersPage> {
 }
 
 class _UsersTable extends StatelessWidget {
-  final AdminProvider admin;
+  final List<UserWithBoatModel> users;
 
-  const _UsersTable({required this.admin});
+  const _UsersTable({required this.users});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          // Table headers
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-            decoration: BoxDecoration(
-              color: AppColors.homeBackground.withOpacity(0.3),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
+    return Column(
+      children: [
+        // Table headers (UPDATED - Now centered)
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE3F2FD), // Light blue header like your screenshot
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(12),
+              topRight: Radius.circular(12),
+            ),
+          ),
+          child: const Row(
+            children: [
+              Expanded(
+                flex: 2, 
+                child: Text(
+                  'Last Active', 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  textAlign: TextAlign.center, // CENTERED
+                )
               ),
-            ),
-            child: const Row(
-              children: [
-                Expanded(flex: 2, child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(flex: 3, child: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(flex: 2, child: Text('Boat No.', style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(flex: 2, child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                Expanded(flex: 3, child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-            ),
+              Expanded(
+                flex: 2, 
+                child: Text(
+                  'Date', 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  textAlign: TextAlign.center, // CENTERED
+                )
+              ),
+              Expanded(
+                flex: 3, 
+                child: Text(
+                  'Full Name', 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  textAlign: TextAlign.center, // CENTERED
+                )
+              ),
+              Expanded(
+                flex: 2, 
+                child: Text(
+                  'Boat No.', 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  textAlign: TextAlign.center, // CENTERED
+                )
+              ),
+              Expanded(
+                flex: 2, 
+                child: Text(
+                  'Status', 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  textAlign: TextAlign.center, // CENTERED
+                )
+              ),
+              Expanded(
+                flex: 2, 
+                child: Text(
+                  'Action', 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  textAlign: TextAlign.center, // CENTERED
+                )
+              ),
+            ],
           ),
-          
-          // Table rows with actual data
-          Expanded(
-            child: admin.isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : admin.users.isEmpty
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.people_outline,
-                              size: 64,
-                              color: AppColors.textSecondary,
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              'No users registered yet',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: admin.users.length,
-                        itemBuilder: (context, index) {
-                          final user = admin.users[index];
-                          return _UserTableRow(
-                            user: user,
-                            onToggleStatus: () => _toggleUserStatus(context, user),
-                            onView: () => _viewUser(context, user),
-                            onEdit: () => _editUser(context, user),
-                            onDelete: () => _deleteUser(context, user),
-                          );
-                        },
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _toggleUserStatus(BuildContext context, UserModel user) {
-    final admin = Provider.of<AdminProvider>(context, listen: false);
-    admin.toggleUserStatus(user.id);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${user.name} is now ${!user.isActive ? 'Active' : 'Inactive'}',
         ),
-        backgroundColor: !user.isActive ? Colors.green : Colors.orange,
-      ),
+        
+        // Table rows with actual data
+        Expanded(
+          child: ListView.builder(
+            itemCount: users.length,
+            itemBuilder: (context, index) {
+              final userWithBoat = users[index];
+              return _UserTableRow(
+                userWithBoat: userWithBoat,
+                onToggleStatus: () => _toggleUserStatus(context, userWithBoat),
+                onView: () => _viewUser(context, userWithBoat),
+                onEdit: () => _editUser(context, userWithBoat),
+                onDelete: () => _deleteUser(context, userWithBoat),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
-  void _viewUser(BuildContext context, UserModel user) {
+  void _toggleUserStatus(BuildContext context, UserWithBoatModel userWithBoat) async {
+    try {
+      final databaseService = DatabaseService();
+      await databaseService.updateFishermanStatus(
+        userWithBoat.userId, 
+        !userWithBoat.isActive
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${userWithBoat.fullName} is now ${!userWithBoat.isActive ? 'Active' : 'Inactive'}',
+          ),
+          backgroundColor: !userWithBoat.isActive ? Colors.green : Colors.orange,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error updating status: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _viewUser(BuildContext context, UserWithBoatModel userWithBoat) {
     showDialog(
       context: context,
-      builder: (context) => _UserDetailsDialog(user: user),
+      builder: (context) => _UserDetailsDialog(userWithBoat: userWithBoat),
     );
   }
 
-  void _editUser(BuildContext context, UserModel user) {
-    // TODO: Implement edit user functionality
+  void _editUser(BuildContext context, UserWithBoatModel userWithBoat) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Edit user feature coming soon!'),
@@ -254,29 +372,44 @@ class _UsersTable extends StatelessWidget {
     );
   }
 
-  void _deleteUser(BuildContext context, UserModel user) {
+  void _deleteUser(BuildContext context, UserWithBoatModel userWithBoat) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete User'),
-        content: Text('Are you sure you want to delete ${user.name}?'),
+        content: Text('Are you sure you want to delete ${userWithBoat.fullName}?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              final admin = Provider.of<AdminProvider>(context, listen: false);
-              admin.deleteUser(user.id);
-              Navigator.pop(context);
-              
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${user.name} has been deleted'),
-                  backgroundColor: Colors.red,
-                ),
-              );
+            onPressed: () async {
+              try {
+                final databaseService = DatabaseService();
+                await databaseService.deleteFisherman(userWithBoat.userId);
+                
+                if (userWithBoat.boat != null) {
+                  await databaseService.deleteBoat(userWithBoat.boat!.id);
+                }
+                
+                Navigator.pop(context);
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${userWithBoat.fullName} has been deleted'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              } catch (e) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error deleting user: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
@@ -287,14 +420,14 @@ class _UsersTable extends StatelessWidget {
 }
 
 class _UserTableRow extends StatelessWidget {
-  final UserModel user;
+  final UserWithBoatModel userWithBoat;
   final VoidCallback onToggleStatus;
   final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _UserTableRow({
-    required this.user,
+    required this.userWithBoat,
     required this.onToggleStatus,
     required this.onView,
     required this.onEdit,
@@ -308,78 +441,125 @@ class _UserTableRow extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(
-            color: AppColors.dividerColor.withOpacity(0.3),
-            width: 1,
+            color: AppColors.dividerColor.withOpacity(0.2),
+            width: 0.5,
           ),
         ),
       ),
       child: Row(
         children: [
+          // Last Active column (UPDATED - Now centered)
           Expanded(
             flex: 2,
             child: Text(
-              DateFormatter.formatDate(user.registrationDate),
-              style: const TextStyle(color: AppColors.textPrimary),
+              userWithBoat.lastActiveDisplay,
+              style: TextStyle(
+                color: _getLastActiveColor(userWithBoat.user.lastActive),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center, // CENTERED
             ),
           ),
+          
+          // Registration Date column (UPDATED - Now centered)
+          Expanded(
+            flex: 2,
+            child: Text(
+              DateFormatter.formatDate(userWithBoat.registrationDate),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 12,
+              ),
+              textAlign: TextAlign.center, // CENTERED
+            ),
+          ),
+          
+          // Full Name column (UPDATED - Now centered)
           Expanded(
             flex: 3,
             child: Text(
-              user.name,
+              userWithBoat.fullName,
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.w500,
+                fontSize: 12,
               ),
+              textAlign: TextAlign.center, // CENTERED
             ),
           ),
+          
+          // Boat Number column (UPDATED - Now centered)
           Expanded(
             flex: 2,
             child: Text(
-              user.boatId ?? 'No Boat',
+              userWithBoat.boatNumber,
               style: TextStyle(
-                color: user.boatId != null 
+                color: userWithBoat.hasBoat 
                     ? AppColors.textPrimary 
                     : AppColors.textSecondary,
+                fontSize: 12,
               ),
+              textAlign: TextAlign.center, // CENTERED
             ),
           ),
+          
+          // Status column with toggle (UPDATED - Now centered)
           Expanded(
             flex: 2,
-            child: GestureDetector(
-              onTap: onToggleStatus,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: user.isActive ? Colors.green : Colors.red,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  user.isActive ? 'Active' : 'Inactive',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+            child: Center( // WRAPPED IN CENTER WIDGET
+              child: GestureDetector(
+                onTap: onToggleStatus,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: userWithBoat.isActive ? Colors.green : Colors.red,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  textAlign: TextAlign.center,
+                  child: Text(
+                    userWithBoat.isActive ? 'Active' : 'Inactive',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             ),
           ),
+          
+          // Action buttons column (UPDATED - Now centered)
           Expanded(
-            flex: 3,
-            child: Row(
-              children: [
-                _ActionIcon(Icons.person, Colors.green, onEdit),
-                const SizedBox(width: 8),
-                _ActionIcon(Icons.visibility, Colors.blue, onView),
-                const SizedBox(width: 8),
-                _ActionIcon(Icons.delete, Colors.red, onDelete),
-              ],
+            flex: 2,
+            child: Center( // WRAPPED IN CENTER WIDGET
+              child: Row(
+                mainAxisSize: MainAxisSize.min, // Keep buttons together
+                children: [
+                  _ActionIcon(Icons.person, Colors.green, onEdit),
+                  const SizedBox(width: 4),
+                  _ActionIcon(Icons.visibility, Colors.blue, onView),
+                  const SizedBox(width: 4),
+                  _ActionIcon(Icons.delete, Colors.red, onDelete),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Color _getLastActiveColor(DateTime? lastActive) {
+    if (lastActive == null) return Colors.red;
+    
+    final difference = DateTime.now().difference(lastActive);
+    
+    if (difference.inMinutes < 60) return Colors.green;
+    if (difference.inDays < 7) return Colors.orange;
+    if (difference.inDays < 30) return Colors.red.shade300;
+    return Colors.red;
   }
 }
 
@@ -394,27 +574,30 @@ class _ActionIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
-        width: 32,
-        height: 32,
+        width: 24,
+        height: 24,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
+          color: color,
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: color, size: 16),
+        child: Icon(icon, color: Colors.white, size: 12),
       ),
     );
   }
 }
 
 class _UserDetailsDialog extends StatelessWidget {
-  final UserModel user;
+  final UserWithBoatModel userWithBoat;
 
-  const _UserDetailsDialog({required this.user});
+  const _UserDetailsDialog({required this.userWithBoat});
 
   @override
   Widget build(BuildContext context) {
+    final user = userWithBoat.user;
+    final boat = userWithBoat.boat;
+    
     return AlertDialog(
       title: Text(user.name),
       content: SingleChildScrollView(
@@ -422,14 +605,38 @@ class _UserDetailsDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _DetailRow('Display ID', user.displayId ?? 'N/A'),
+            _DetailRow('User ID', user.displayId ?? user.id),
             _DetailRow('Email', user.email),
-            _DetailRow('Phone', user.phone), // field name now is phone
-            _DetailRow('User Type', user.userType.toUpperCase()),
+            _DetailRow('Phone', user.phone),
+            _DetailRow('Address', user.address ?? 'N/A'),
+            _DetailRow('Fishing Area', user.fishingArea ?? 'N/A'),
+            _DetailRow('Emergency Contact', user.emergencyContactPerson ?? 'N/A'),
             _DetailRow('Registration Date', DateFormatter.formatDate(user.registrationDate)),
+            _DetailRow('Last Active', user.lastActiveDisplay),
             _DetailRow('Status', user.isActive ? 'Active' : 'Inactive'),
-            if (user.boatId != null)
-              _DetailRow('Boat ID', user.boatId!),
+            const SizedBox(height: 16),
+            const Text(
+              'Boat Information:',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (boat != null) ...[
+              _DetailRow('Boat Number', boat.boatNumber),
+              _DetailRow('Boat Name', boat.name ?? 'N/A'),
+              _DetailRow('Registration Number', boat.registrationNumber ?? 'N/A'),
+              _DetailRow('Boat Status', boat.isActive ? 'Active' : 'Inactive'),
+              _DetailRow('Last Used', boat.lastUsedDisplay),
+            ] else
+              const Text(
+                'No boat registered',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
           ],
         ),
       ),
@@ -449,7 +656,7 @@ class _UserDetailsDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 100,
+            width: 120,
             child: Text(
               '$label:',
               style: const TextStyle(

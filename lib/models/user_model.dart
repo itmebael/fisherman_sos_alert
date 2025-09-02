@@ -16,6 +16,7 @@ class UserModel {
   final String? fishingArea;
   final String? emergencyContactPerson;
   final String? boatId;
+  final DateTime? lastActive; // NEW: Track last activity
 
   UserModel({
     required this.id,
@@ -33,6 +34,7 @@ class UserModel {
     this.fishingArea,
     this.emergencyContactPerson,
     this.boatId,
+    this.lastActive, // NEW: Optional last activity
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -45,6 +47,16 @@ class UserModel {
       regDate = json['registrationDate'];
     } else {
       regDate = DateTime.now();
+    }
+
+    // Parse lastActive
+    DateTime? lastActiveDate;
+    if (json['lastActive'] is Timestamp) {
+      lastActiveDate = (json['lastActive'] as Timestamp).toDate();
+    } else if (json['lastActive'] is String) {
+      lastActiveDate = DateTime.tryParse(json['lastActive']);
+    } else if (json['lastActive'] is DateTime) {
+      lastActiveDate = json['lastActive'];
     }
 
     return UserModel(
@@ -63,6 +75,7 @@ class UserModel {
       fishingArea: json['fishingArea'],
       emergencyContactPerson: json['emergencyContactPerson'],
       boatId: json['boatId'],
+      lastActive: lastActiveDate, // NEW
     );
   }
 
@@ -83,6 +96,7 @@ class UserModel {
       'fishingArea': fishingArea,
       'emergencyContactPerson': emergencyContactPerson,
       'boatId': boatId,
+      if (lastActive != null) 'lastActive': Timestamp.fromDate(lastActive!), // NEW
     };
   }
 
@@ -102,6 +116,7 @@ class UserModel {
     String? fishingArea,
     String? emergencyContactPerson,
     String? boatId,
+    DateTime? lastActive, // NEW
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -119,6 +134,31 @@ class UserModel {
       fishingArea: fishingArea ?? this.fishingArea,
       emergencyContactPerson: emergencyContactPerson ?? this.emergencyContactPerson,
       boatId: boatId ?? this.boatId,
+      lastActive: lastActive ?? this.lastActive, // NEW
     );
+  }
+
+  // NEW: Helper method to get formatted last active display
+  String get lastActiveDisplay {
+    if (lastActive == null) return 'Never';
+    
+    final now = DateTime.now();
+    final difference = now.difference(lastActive!);
+    
+    if (difference.inMinutes < 1) {
+      return 'Active Now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes} Minutes';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours} Hours Ago';
+    } else if (difference.inDays < 30) {
+      return '${difference.inDays} Days Ago';
+    } else if (difference.inDays < 365) {
+      final months = (difference.inDays / 30).floor();
+      return '$months ${months == 1 ? 'Month' : 'Months'} Ago';
+    } else {
+      final years = (difference.inDays / 365).floor();
+      return '$years ${years == 1 ? 'Year' : 'Years'} Ago';
+    }
   }
 }
