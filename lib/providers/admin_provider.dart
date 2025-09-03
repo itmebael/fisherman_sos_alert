@@ -12,6 +12,11 @@ class AdminProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Count properties
+  int _totalUsers = 0;
+  int _totalBoats = 0;
+  int _totalRescued = 0;
+
   // Getters
   List<UserWithBoatModel> get usersWithBoats => _usersWithBoats;
   List<UserModel> get users => _usersWithBoats.map((uwb) => uwb.user).toList(); // For backward compatibility
@@ -19,11 +24,46 @@ class AdminProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  // Statistics
-  int get totalUsers => _usersWithBoats.length;
-  int get totalBoats => _usersWithBoats.where((uwb) => uwb.hasBoat).length;
+  // Updated getters for counts
+  int get totalUsers => _totalUsers;
+  int get totalBoats => _totalBoats;
+  int get totalRescued => _totalRescued;
+  
+  // Legacy getters for backward compatibility
   int get activeUsers => _usersWithBoats.where((uwb) => uwb.isActive).length;
   int get pendingRescues => _rescueNotifications.where((alert) => alert.status == 'pending').length;
+
+  // Load dashboard counts
+  Future<void> loadDashboardCounts() async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      // Load all counts concurrently
+      final results = await Future.wait([
+        _databaseService.getTotalUsersCount(),
+        _databaseService.getTotalBoatsCount(),
+        _databaseService.getTotalRescuedCount(),
+      ]);
+
+      _totalUsers = results[0];
+      _totalBoats = results[1];
+      _totalRescued = results[2];
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // Call this method when AdminDashboard loads
+  Future<void> initializeDashboard() async {
+    await loadDashboardCounts();
+  }
 
   // Load users with their boats
   Future<void> loadUsersWithBoats() async {
@@ -218,9 +258,4 @@ class AdminProvider with ChangeNotifier {
       uwb.user.userType == 'fisherman' && uwb.isActive && uwb.hasBoat
     ).toList();
   }
-
-  /// Returns the total number of successful rescues.
-  /// This counts SOS alerts with status "rescued".
-  int get totalRescued =>
-      _rescueNotifications.where((alert) => alert.status?.toLowerCase() == 'rescued').length;
 }

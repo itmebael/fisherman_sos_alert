@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../constants/colors.dart';
 import '../admin/admin_drawer.dart';
+import '../../widgets/admin/map_widget.dart';
 
 class NavigationPage extends StatelessWidget {
   const NavigationPage({Key? key}) : super(key: key);
@@ -65,7 +66,7 @@ class NavigationPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Mobile Rescue And  Location Tracking System',
+                  'Mobile Rescue And Location Tracking System',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -84,9 +85,7 @@ class NavigationPage extends StatelessWidget {
                 Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      color: AppColors.drawerColor.withOpacity(0.5),
-                    ),
+                    child: const MapWidget(),
                   ),
                 ),
               ],

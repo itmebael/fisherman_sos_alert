@@ -60,6 +60,42 @@ class DatabaseService {
       : throw Exception('ID overflow');
   }
 
+// Count total users (fishermen only)
+Future<int> getTotalUsersCount() async {
+  try {
+    final fishermen = await _firestore.collectionGroup('fishermen').get();
+    return fishermen.docs.length;
+  } catch (e) {
+    print('Error getting users count: $e');
+    return 0;
+  }
+}
+
+  // Count total boats
+  Future<int> getTotalBoatsCount() async {
+    try {
+      final boats = await _firestore.collection('boats').get();
+      return boats.docs.length;
+    } catch (e) {
+      print('Error getting boats count: $e');
+      return 0;
+    }
+  }
+
+  // Count total rescued (SOS alerts with status 'resolved')
+  Future<int> getTotalRescuedCount() async {
+    try {
+      final rescuedAlerts = await _firestore
+          .collection('sos_alerts')
+          .where('status', isEqualTo: 'resolved')
+          .get();
+      return rescuedAlerts.docs.length;
+    } catch (e) {
+      print('Error getting rescued count: $e');
+      return 0;
+    }
+  }
+
   // Save fisherman to fishermen subcollection
   Future<void> saveFisherman(String uid, Map<String, dynamic> fishermenData) async {
     await _firestore
@@ -95,7 +131,7 @@ class DatabaseService {
         'emergencyContactPerson': user.emergencyContactPerson ?? '',
         'isActive': user.isActive,
         'registrationDate': Timestamp.fromDate(user.registrationDate),
-        if (user.lastActive != null) 'lastActive': Timestamp.fromDate(user.lastActive!), // NEW
+        if (user.lastActive != null) 'lastActive': Timestamp.fromDate(user.lastActive!),
       };
       await saveFisherman(user.id, fishermenData);
     } else if (user.userType == 'coastguard') {
@@ -107,7 +143,7 @@ class DatabaseService {
         'email': user.email,
         'isActive': user.isActive,
         'registrationDate': Timestamp.fromDate(user.registrationDate),
-        if (user.lastActive != null) 'lastActive': Timestamp.fromDate(user.lastActive!), // NEW
+        if (user.lastActive != null) 'lastActive': Timestamp.fromDate(user.lastActive!),
       };
       await saveCoastguard(user.id, coastguardData);
     }
@@ -143,7 +179,7 @@ class DatabaseService {
           isActive: data['isActive'] ?? true,
           lastActive: data['lastActive'] != null 
               ? (data['lastActive'] as Timestamp).toDate() 
-              : null, // NEW
+              : null,
         );
       }
 
@@ -173,7 +209,7 @@ class DatabaseService {
           emergencyContactPerson: data['emergencyContactPerson'],
           lastActive: data['lastActive'] != null 
               ? (data['lastActive'] as Timestamp).toDate() 
-              : null, // NEW
+              : null,
         );
       }
 
@@ -183,7 +219,7 @@ class DatabaseService {
     }
   }
 
-  // NEW: Get all fishermen with their boats (for admin dashboard)
+  // Get all fishermen with their boats (for admin dashboard)
   Stream<List<UserWithBoatModel>> getAllUsersWithBoats() {
     return _firestore.collectionGroup('fishermen').snapshots().asyncMap((snapshot) async {
       List<UserWithBoatModel> usersWithBoats = [];
@@ -240,7 +276,7 @@ class DatabaseService {
     });
   }
 
-  // NEW: Update fisherman last active (called when fisherman does any activity)
+  // Update fisherman last active (called when fisherman does any activity)
   Future<void> updateFishermanLastActive(String userId) async {
     try {
       await _firestore
@@ -254,7 +290,7 @@ class DatabaseService {
     }
   }
 
-  // NEW: Update boat last used (called when boat is tracked/used)
+  // Update boat last used (called when boat is tracked/used)
   Future<void> updateBoatLastUsed(String boatId) async {
     try {
       await _firestore
@@ -266,7 +302,7 @@ class DatabaseService {
     }
   }
 
-  // NEW: Update fisherman status (for admin)
+  // Update fisherman status (for admin)
   Future<void> updateFishermanStatus(String userId, bool isActive) async {
     try {
       await _firestore
@@ -280,7 +316,7 @@ class DatabaseService {
     }
   }
 
-  // NEW: Update boat status (for admin)
+  // Update boat status (for admin)
   Future<void> updateBoatStatus(String boatId, bool isActive) async {
     try {
       await _firestore
@@ -292,7 +328,7 @@ class DatabaseService {
     }
   }
 
-  // NEW: Delete fisherman (for admin)
+  // Delete fisherman (for admin)
   Future<void> deleteFisherman(String userId) async {
     try {
       await _firestore
@@ -306,7 +342,7 @@ class DatabaseService {
     }
   }
 
-  // NEW: Delete boat (for admin)
+  // Delete boat (for admin)
   Future<void> deleteBoat(String boatId) async {
     try {
       await _firestore
@@ -318,10 +354,9 @@ class DatabaseService {
     }
   }
 
-  // Get all fishermen (for admin use) - UPDATED to work with subcollections
+  // Get all fishermen (for admin use)
   Future<List<UserModel>> getAllFishermen() async {
     try {
-      // Use collectionGroup to get all fishermen from all users
       final snapshot = await _firestore.collectionGroup('fishermen').get();
       
       return snapshot.docs.map((doc) {
@@ -350,10 +385,9 @@ class DatabaseService {
     }
   }
 
-  // Get all coastguards (for admin use) - UPDATED to work with subcollections
+  // Get all coastguards (for admin use)
   Future<List<UserModel>> getAllCoastguards() async {
     try {
-      // Use collectionGroup to get all coastguards from all users
       final snapshot = await _firestore.collectionGroup('coastguards').get();
       
       return snapshot.docs.map((doc) {

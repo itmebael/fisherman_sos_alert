@@ -10,93 +10,97 @@ class FishermanDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Drawer(
-      child: Container(
-        color: AppColors.drawerColor,
-        child: Column(
-          children: [
-            Container(
-              height: 120,
-              width: double.infinity,
-              color: AppColors.drawerColor,
-              child: const SafeArea(
-                child: Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(height: 10),
-                      Text(
-                        AppStrings.welcome,
-                        style: TextStyle(
-                          color: AppColors.whiteColor,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    return SizedBox(
+      // 👇 Drawer width adjusts based on screen size
+      width: screenWidth * 0.7, // 70% of screen width (adjust as needed)
+      child: Drawer(
+        child: Container(
+          color: AppColors.drawerColor,
+          child: Column(
+            children: [
+              Container(
+                height: 120,
+                width: double.infinity,
+                color: AppColors.drawerColor,
+                child: const SafeArea(
+                  child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: 10),
+                        Text(
+                          AppStrings.welcome,
+                          style: TextStyle(
+                            color: AppColors.whiteColor,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Menu Items
+              Expanded(
+                child: Container(
+                  color: AppColors.drawerColor,
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    children: [
+                      _buildDrawerItem(
+                        context,
+                        icon: Icons.home,
+                        title: AppStrings.home,
+                        route: AppRoutes.fishermanHome,
+                      ),
+                      _buildDrawerItem(
+                        context,
+                        icon: Icons.newspaper,
+                        title: AppStrings.news,
+                        route: AppRoutes.fishermanNews,
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-            
-            // Menu Items
-            Expanded(
-              child: Container(
-                color: AppColors.drawerColor,
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.home,
-                      title: AppStrings.home,
-                      route: AppRoutes.fishermanHome,
+
+              // Logout Button
+              Container(
+                margin: const EdgeInsets.all(12),
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.newspaper,
-                      title: AppStrings.news,
-                      route: AppRoutes.fishermanNews,
+                    elevation: 3,
+                  ),
+                  icon: const Icon(Icons.logout, size: 22),
+                  label: const Text(
+                    "Logout",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ],
+                  ),
+                  onPressed: () async {
+                    await Provider.of<AuthProvider>(context, listen: false).logout();
+
+                    if (context.mounted) {
+                      Navigator.pushReplacementNamed(context, AppRoutes.login);
+                    }
+                  },
                 ),
               ),
-            ),
-
-            // Logout Button (matching admin drawer design)
-            Container(
-              margin: const EdgeInsets.all(12),
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red, // Solid red background
-                  foregroundColor: Colors.white, // White text & icon
-                  minimumSize: const Size(double.infinity, 50), // Full width
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12), // Rounded corners
-                  ),
-                  elevation: 3, // Slight shadow to pop out
-                ),
-                icon: const Icon(Icons.logout, size: 22),
-                label: const Text(
-                  "Logout",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                onPressed: () async {
-                  // Call AuthProvider to logout
-                  await Provider.of<AuthProvider>(context, listen: false).logout();
-
-                  // Navigate to login screen
-                  if (context.mounted) {
-                    Navigator.pushReplacementNamed(context, AppRoutes.login);
-                  }
-                },
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -124,7 +128,7 @@ class FishermanDrawer extends StatelessWidget {
           child: Icon(
             icon,
             color: AppColors.whiteColor,
-            size: 20, // Adjusted to match admin drawer
+            size: 20,
           ),
         ),
         title: Text(

@@ -26,6 +26,7 @@ class NewsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Image / Placeholder
           ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             child: Container(
@@ -39,7 +40,8 @@ class NewsCard extends StatelessWidget {
               ),
             ),
           ),
-          
+
+          // Text content
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -54,7 +56,7 @@ class NewsCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                
+
                 Text(
                   content,
                   style: const TextStyle(
@@ -66,15 +68,18 @@ class NewsCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 12),
-                
+
+                // ✅ Fixed Row (no overflow)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '${publishDate.day}/${publishDate.month}/${publishDate.year}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
+                    Expanded(
+                      child: Text(
+                        '${publishDate.day}/${publishDate.month}/${publishDate.year}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                        overflow: TextOverflow.ellipsis, // shrink if needed
                       ),
                     ),
                     TextButton(

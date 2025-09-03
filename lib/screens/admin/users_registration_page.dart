@@ -59,19 +59,26 @@ class _UsersRegistrationPageState extends State<UsersRegistrationPage> {
     });
   }
 
-  Future<String> _fetchNextBoatId() async {
+ Future<String> _fetchNextBoatId() async {
+  try {
     final snapshot = await FirebaseFirestore.instance
         .collection('boats')
         .orderBy('id', descending: true)
         .limit(1)
         .get();
+    
     String nextId = '00001';
     if (snapshot.docs.isNotEmpty) {
       final lastId = int.tryParse(snapshot.docs.first['id']) ?? 0;
       nextId = (lastId + 1).toString().padLeft(5, '0');
     }
     return nextId;
+  } catch (e) {
+    print('Error fetching next boat ID: $e');
+    // Fallback to checking manually or returning a default
+    return '00001';
   }
+}
 
   /// Registration flow with admin re-auth, using admin's real credentials from AuthProvider.
   Future<void> _registerUser() async {
@@ -262,6 +269,26 @@ class _UsersRegistrationPageState extends State<UsersRegistrationPage> {
                         ),
                       ),
                       const SizedBox(height: 24),
+                      // ID Number - First field (much shorter width)
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 1,
+                            child: CustomTextField(
+                              controller: _idController,
+                              label: 'ID',
+                              hint: 'Auto-generated',
+                              prefixIcon: Icons.badge,
+                              readOnly: true,
+                            ),
+                          ),
+                          const Expanded(
+                            flex: 4,
+                            child: SizedBox(), // More empty space to make ID field much shorter
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(
@@ -344,35 +371,20 @@ class _UsersRegistrationPageState extends State<UsersRegistrationPage> {
                       ),
                       const SizedBox(height: 16),
                       CustomTextField(
+                        controller: _boatNumberController,
+                        label: 'Boat Number',
+                        hint: 'Enter boat number',
+                        prefixIcon: Icons.directions_boat,
+                      ),
+                      const SizedBox(height: 16),
+                      // Email Address - After Boat Number
+                      CustomTextField(
                         controller: _emailController,
                         label: 'Email Address',
                         hint: 'Enter email address',
                         prefixIcon: Icons.email,
                         keyboardType: TextInputType.emailAddress,
                         validator: Validators.email,
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: CustomTextField(
-                              controller: _idController,
-                              label: 'ID',
-                              hint: 'Auto-generated',
-                              prefixIcon: Icons.badge,
-                              readOnly: true,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: CustomTextField(
-                              controller: _boatNumberController,
-                              label: 'Boat Number',
-                              hint: 'Enter boat number',
-                              prefixIcon: Icons.directions_boat,
-                            ),
-                          ),
-                        ],
                       ),
                       const SizedBox(height: 16),
                       Row(

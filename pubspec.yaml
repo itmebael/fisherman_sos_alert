@@ -20,7 +20,8 @@ dependencies:
   shared_preferences: ^2.2.2
 
   # Location & permissions
-  geolocator: ^14.0.2
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
   permission_handler: ^12.0.1
 
   # Networking
@@ -35,8 +36,11 @@ dependencies:
   # URL handling
   url_launcher: ^6.2.5
 
-  # Maps
-  google_maps_flutter: ^2.6.0
+  # Maps - OpenStreetMap (No API Key Required!)
+  flutter_map: ^6.1.0
+  flutter_map_cancellable_tile_provider: ^2.0.0  # Downgraded to compatible version
+  latlong2: ^0.9.1
+  flutter_polyline_points: ^2.0.0
 
   # Media
   image_picker: ^1.1.1

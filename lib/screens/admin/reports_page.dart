@@ -65,7 +65,7 @@ class ReportsPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Mobile Rescue And  Location Tracking System',
+                  'Mobile Rescue And Location Tracking System',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -95,7 +95,7 @@ class ReportsPage extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: const [
                               Text(
-                                'Create Report',
+                                'Rescue Reports',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -149,23 +149,25 @@ class ReportsPage extends StatelessWidget {
                                   ),
                                   child: const Row(
                                     children: [
-                                      Expanded(flex: 2, child: Text('Profile', style: TextStyle(fontWeight: FontWeight.bold))),
-                                      Expanded(flex: 3, child: Text('Name', style: TextStyle(fontWeight: FontWeight.bold))),
-                                      Expanded(flex: 2, child: Text('Departure Time', style: TextStyle(fontWeight: FontWeight.bold))),
-                                      Expanded(flex: 2, child: Text('Arrival Time', style: TextStyle(fontWeight: FontWeight.bold))),
-                                      Expanded(flex: 2, child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                                      Expanded(flex: 2, child: Center(child: Text('Profile', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 3, child: Center(child: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Distress Time', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Rescue Time', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold)))),
                                     ],
                                   ),
                                 ),
                                 
-                                // Sample table rows (without data as requested)
+                                // Sample table rows with examples
                                 Expanded(
-                                  child: ListView.builder(
-                                    itemCount: 5,
-                                    itemBuilder: (context, index) {
-                                      return Container(
-                                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                  child: Column(
+                                    children: [
+                                      // First row - In Distress (needs rescue)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                                         decoration: BoxDecoration(
+                                          color: Colors.white,
                                           border: Border(
                                             bottom: BorderSide(
                                               color: AppColors.dividerColor.withOpacity(0.3),
@@ -175,30 +177,155 @@ class ReportsPage extends StatelessWidget {
                                         ),
                                         child: Row(
                                           children: [
+                                            // Profile picture
                                             Expanded(
                                               flex: 2,
-                                              child: Container(
-                                                width: 40,
-                                                height: 40,
-                                                decoration: BoxDecoration(
-                                                  color: AppColors.homeBackground.withOpacity(0.5),
-                                                  borderRadius: BorderRadius.circular(20),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.person,
-                                                  color: AppColors.textSecondary,
-                                                  size: 24,
+                                              child: Center(
+                                                child: Container(
+                                                  width: 50,
+                                                  height: 50,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.blue.withOpacity(0.2),
+                                                    borderRadius: BorderRadius.circular(25),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.person,
+                                                    color: Colors.blue,
+                                                    size: 28,
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                            Expanded(flex: 3, child: Text('--', style: TextStyle(color: AppColors.textSecondary))),
-                                            Expanded(flex: 2, child: Text('--', style: TextStyle(color: AppColors.textSecondary))),
-                                            Expanded(flex: 2, child: Text('--', style: TextStyle(color: AppColors.textSecondary))),
-                                            Expanded(flex: 2, child: Text('--', style: TextStyle(color: AppColors.textSecondary))),
+                                            // Full Name
+                                            Expanded(flex: 3, child: Center(child: Text('Juan P. Cruz', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500, fontSize: 15)))),
+                                            // Distress Time
+                                            Expanded(flex: 2, child: Center(child: Text('2:15 pm', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)))),
+                                            // Rescue Time
+                                            Expanded(flex: 2, child: Center(child: Text('-', style: TextStyle(color: AppColors.textSecondary, fontSize: 14)))),
+                                            // Date
+                                            Expanded(flex: 2, child: Center(child: Text('9/02/2025', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)))),
+                                            // Action status
+                                            Expanded(
+                                              flex: 2,
+                                              child: Center(
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.red.withOpacity(0.1),
+                                                        borderRadius: BorderRadius.circular(16),
+                                                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: const [
+                                                          Icon(Icons.circle, color: Colors.red, size: 10),
+                                                          SizedBox(width: 6),
+                                                          Text('In Distress', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600)),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      width: 32,
+                                                      height: 32,
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.green,
+                                                        borderRadius: BorderRadius.circular(6),
+                                                        boxShadow: [
+                                                          BoxShadow(
+                                                            color: Colors.green.withOpacity(0.3),
+                                                            blurRadius: 4,
+                                                            offset: const Offset(0, 2),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      child: const Icon(
+                                                        Icons.check,
+                                                        color: Colors.white,
+                                                        size: 20,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
                                           ],
                                         ),
-                                      );
-                                    },
+                                      ),
+                                      // Second row - Already Rescued
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: AppColors.dividerColor.withOpacity(0.3),
+                                              width: 1,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            // Profile picture
+                                            Expanded(
+                                              flex: 2,
+                                              child: Center(
+                                                child: Container(
+                                                  width: 50,
+                                                  height: 50,
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.blue.withOpacity(0.2),
+                                                    borderRadius: BorderRadius.circular(25),
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.person,
+                                                    color: Colors.blue,
+                                                    size: 28,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            // Full Name
+                                            Expanded(flex: 3, child: Center(child: Text('Eman P. Pascual', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500, fontSize: 15)))),
+                                            // Distress Time
+                                            Expanded(flex: 2, child: Center(child: Text('12:30 pm', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)))),
+                                            // Rescue Time
+                                            Expanded(flex: 2, child: Center(child: Text('1:00 pm', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)))),
+                                            // Date
+                                            Expanded(flex: 2, child: Center(child: Text('8/15/2025', style: TextStyle(color: AppColors.textPrimary, fontSize: 14)))),
+                                            // Action status
+                                            Expanded(
+                                              flex: 2,
+                                              child: Center(
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.green.withOpacity(0.1),
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    border: Border.all(color: Colors.green.withOpacity(0.3)),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                    children: const [
+                                                      Icon(Icons.circle, color: Colors.green, size: 10),
+                                                      SizedBox(width: 6),
+                                                      Text('Rescued', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Empty space for remaining area
+                                      const Expanded(child: SizedBox()),
+                                    ],
                                   ),
                                 ),
                               ],
