@@ -45,5 +45,21 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	
+	<!-- Location permissions for SOS button -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs location access to send SOS alerts with your current position to emergency services.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs location access to send SOS alerts with your current position to emergency services.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app needs location access to send SOS alerts with your current position to emergency services.</string>
+	
+	<!-- Camera permission for profile pictures -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to take profile pictures.</string>
+	
+	<!-- Photo library permission -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs photo library access to select profile pictures.</string>
 </dict>
 </plist>

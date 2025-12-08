@@ -1,11 +1,167 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/strings.dart';
-import '../../widgets/fisherman/sos_button.dart';
+import 'sos_button.dart';
+import '../../services/database_service.dart';
+import '../../services/global_notification_manager.dart';
+import '../../providers/auth_provider.dart';
 import 'fisherman_drawer.dart';
 
-class FishermanHomeScreen extends StatelessWidget {
-  const FishermanHomeScreen({Key? key}) : super(key: key);
+class FishermanHomeScreen extends StatefulWidget {
+  const FishermanHomeScreen({super.key});
+
+  @override
+  State<FishermanHomeScreen> createState() => _FishermanHomeScreenState();
+}
+
+class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
+  final DatabaseService _databaseService = DatabaseService();
+  final GlobalNotificationManager _globalNotificationManager = GlobalNotificationManager();
+  List<Map<String, dynamic>> _coastguards = [];
+  bool _isLoadingCoastguards = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCoastguards();
+    // Initialize global notification manager
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      _globalNotificationManager.initialize(context, authProvider);
+    });
+  }
+
+  @override
+  void dispose() {
+    _globalNotificationManager.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCoastguards() async {
+    setState(() {
+      _isLoadingCoastguards = true;
+    });
+    try {
+      final coastguards = await _databaseService.getActiveCoastguards();
+      setState(() {
+        _coastguards = coastguards;
+        _isLoadingCoastguards = false;
+      });
+    } catch (e) {
+      print('Error loading coastguards: $e');
+      setState(() {
+        _isLoadingCoastguards = false;
+      });
+    }
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
+    try {
+      if (await canLaunchUrl(phoneUri)) {
+        await launchUrl(phoneUri);
+      } else {
+        throw 'Could not launch phone call';
+      }
+    } catch (e) {
+      // Handle error - phone call not available
+      print('Error making phone call: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: Unable to make phone call. $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showCallDialog() {
+    // Find first coastguard with a phone number
+    final coastguardWithPhone = _coastguards.firstWhere(
+      (cg) => cg['phone'] != null && cg['phone'].toString().isNotEmpty,
+      orElse: () => <String, dynamic>{},
+    );
+
+    if (coastguardWithPhone.isEmpty) {
+      // No phone number available, show message
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.phone, color: Colors.green),
+              SizedBox(width: 8),
+              Text('Call Coast Guard'),
+            ],
+          ),
+          content: const Text(
+            'No emergency contact number is available at the moment. Please use the SOS button for emergency alerts.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final phoneNumber = coastguardWithPhone['phone'].toString();
+    final coastguardName = coastguardWithPhone['name'] ?? 
+                           coastguardWithPhone['first_name'] ?? 
+                           'Coast Guard';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.local_police, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Call Coast Guard'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Contact: $coastguardName'),
+            const SizedBox(height: 8),
+            Text('Phone: $phoneNumber'),
+            const SizedBox(height: 16),
+            const Text(
+              'Do you want to call the Coast Guard?',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _makePhoneCall(phoneNumber);
+            },
+            icon: const Icon(Icons.phone, size: 18),
+            label: const Text('Call'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +185,7 @@ class FishermanHomeScreen extends StatelessWidget {
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
+        actions: const [],
       ),
       drawer: const FishermanDrawer(),
       body: Container(
@@ -88,7 +245,7 @@ class FishermanHomeScreen extends StatelessWidget {
                       const SOSButton(),
                       SizedBox(height: screenHeight * 0.03),
                       const Text(
-                        'Press the SOS button in case of emergency.\nThis will immediately alert the BantayDagat Coast Guard.',
+                        'Press the SOS button in case of emergency.\nThis will immediately alert the Salbar_Mangirisda Coast Guard.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 16,
@@ -96,6 +253,55 @@ class FishermanHomeScreen extends StatelessWidget {
                           height: 1.5,
                         ),
                       ),
+                      SizedBox(height: screenHeight * 0.04),
+                      // Call Coast Guard Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _isLoadingCoastguards ? null : _showCallDialog,
+                          icon: _isLoadingCoastguards
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Icon(Icons.phone, size: 24),
+                          label: Text(
+                            _isLoadingCoastguards
+                                ? 'Loading...'
+                                : 'Call Coast Guard',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(
+                              vertical: screenHeight * 0.02,
+                              horizontal: screenWidth * 0.05,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 4,
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: screenHeight * 0.02),
+                      const Text(
+                        'Contact the Coast Guard directly for assistance.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: screenHeight * 0.05),
                     ],
                   ),
                 ),

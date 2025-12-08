@@ -1,365 +1,407 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
+import 'dart:io';
 import '../models/user_model.dart';
 import '../data/local/shared_preferences_helper.dart';
+import '../supabase_config.dart';
 
 class AuthService {
-  static final AuthService _instance = AuthService._internal();
-  factory AuthService() => _instance;
-  AuthService._internal();
-
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+  final SupabaseClient _supabase = SupabaseConfig.client;
   UserModel? _currentUser;
+
+  // Hardcoded admin credentials
+  static const String _adminEmail = 'phicoastguard@gmail.com';
+  static const String _adminPassword = 'philippinecoastguard@2025';
+
   UserModel? get currentUser => _currentUser;
 
-  User? get firebaseUser => _auth.currentUser;
+  // Stream of auth state changes
+  Stream<AuthState> get authStateChanges => _supabase.auth.onAuthStateChange;
 
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  // Check if user is logged in
+  bool get isLoggedIn => _currentUser != null;
 
-  // Register admin/coastguard - updated to use subcollection
-  Future<bool> registerAdmin({
-    required String firstName,
-    String? middleName,
-    required String lastName,
+  // Initialize auth service
+  Future<void> initialize() async {
+    // Check if user is already logged in
+    final session = _supabase.auth.currentSession;
+    if (session != null) {
+      await _fetchUserData(session.user.id);
+    }
+  }
+
+  // Login method with hardcoded admin support
+  Future<bool> login(String email, String password) async {
+    try {
+      // Check for hardcoded admin credentials first
+      if (email.trim().toLowerCase() == _adminEmail && password == _adminPassword) {
+        // Do NOT call Supabase for hardcoded admin. Proceed offline so login never fails on network.
+        _currentUser = UserModel(
+          id: 'admin_${DateTime.now().millisecondsSinceEpoch}',
+          firstName: "Philippine",
+          lastName: "Coast Guard",
+          name: "Philippine Coast Guard",
+          email: email.trim(),
+          phone: '',
+          userType: 'coastguard',
+          registrationDate: DateTime.now(),
+          isActive: true,
+          createdAt: DateTime.now(),
+        );
+        await SharedPreferencesHelper.saveUserData(_currentUser!);
+        return true;
+      }
+
+      // For other users, use Supabase authentication with timeout and retry
+      try {
+        // Set timeout for the authentication request
+        final response = await _supabase.auth.signInWithPassword(
+          email: email.trim(),
+          password: password,
+        ).timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw 'Connection timeout. Please check your internet connection and try again.';
+          },
+        );
+
+        if (response.user != null) {
+          await _fetchUserData(response.user!.id);
+          return true;  
+        }
+
+        return false;
+      } on TimeoutException {
+        throw 'Connection timeout. Please check your internet connection and try again.';
+      } on SocketException catch (e) {
+        throw 'Network error. Please check your internet connection: ${e.message}';
+      } on AuthException catch (e) {
+        throw _getAuthErrorMessage(e.message);
+      } catch (e) {
+        if (e.toString().contains('ClientException') || e.toString().contains('timeout')) {
+          throw 'Unable to connect to the server. Please check your internet connection and try again.';
+        }
+        throw 'Login failed: ${e.toString()}';
+      }
+    } catch (e) {
+      // Surface more helpful detail in debug logs; keep user-friendly message
+      print('Login error: $e');
+      
+      final errorMessage = e.toString();
+      if (errorMessage.contains('timeout') || errorMessage.contains('ClientException')) {
+        throw 'Unable to connect to the server. Please check your internet connection.';
+      } else if (errorMessage.contains('Invalid login credentials')) {
+        throw 'Invalid email or password.';
+      } else {
+        throw errorMessage;
+      }
+    }
+  }
+
+  // Register new user
+  Future<bool> register({
     required String email,
     required String password,
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String userType,
+    String? profileImageUrl,
+    String? address,
+    String? fishingArea,
+    String? emergencyContactPerson,
   }) async {
     try {
-      final userCredential = await _auth.createUserWithEmailAndPassword(
+      // Create user in Supabase Auth
+      final response = await _supabase.auth.signUp(
         email: email.trim(),
         password: password,
       );
-      final uid = userCredential.user!.uid;
 
-      final coastguardData = {
-        'id': uid,
-        'firstName': firstName,
-        'middleName': middleName?.isEmpty == true ? null : middleName,
-        'lastName': lastName,
-        'email': email.trim(),
-        'isActive': true,
-        'registrationDate': Timestamp.now(),
-      };
+      if (response.user != null) {
+        // Create user profile in database
+        final userData = {
+          'id': response.user!.id,
+          'email': email.trim(),
+          'first_name': firstName,
+          'last_name': lastName,
+          'name': '$firstName $lastName',
+          'phone': phone,
+          'user_type': userType,
+          'registration_date': DateTime.now().toIso8601String(),
+          'is_active': true,
+          if (profileImageUrl != null) 'profile_image_url': profileImageUrl,
+          if (address != null) 'address': address,
+          if (fishingArea != null) 'fishing_area': fishingArea,
+          if (emergencyContactPerson != null) 'emergency_contact_person': emergencyContactPerson,
+        };
 
-      // Save to subcollection
-      await _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('coastguards')
-        .doc(uid)
-        .set(coastguardData);
+        // Insert into appropriate table based on user type
+        if (userType == 'fisherman') {
+          await _supabase.from('fishermen').insert(userData);
+        } else if (userType == 'coastguard') {
+          await _supabase.from('coastguards').insert(userData);
+        }
 
-      _currentUser = UserModel(
-        id: uid,
-        firstName: firstName,
-        middleName: middleName,
-        lastName: lastName,
-        name: "$firstName${middleName != null && middleName.isNotEmpty ? ' $middleName' : ''} $lastName",
-        email: email.trim(),
-        phone: '',
-        userType: 'coastguard',
-        registrationDate: DateTime.now(),
-        isActive: true,
-        address: null,
-        fishingArea: null,
-        emergencyContactPerson: null,
-        boatId: null,
-      );
+        return true;
+      }
 
-      await SharedPreferencesHelper.saveUserData(_currentUser!);
-      return true;
-    } on FirebaseAuthException catch (e) {
-      throw _getAuthErrorMessage(e.code);
+      return false;
+    } on AuthException catch (e) {
+      throw _getAuthErrorMessage(e.message);
     } catch (e) {
       throw 'Registration failed. Please check your connection.';
     }
   }
 
-  // Login method - updated to check both subcollections
-  Future<bool> login(String email, String password) async {
+  // Register boat and fisherman
+  Future<bool> registerBoatAndFisherman({
+    required String email,
+    required String password,
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String boatName,
+    required String boatType,
+    required String boatRegistrationNumber,
+    required String boatCapacity,
+    String? profileImageUrl,
+    String? address,
+    String? fishingArea,
+    String? emergencyContactPerson,
+  }) async {
     try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
+      // Create fisherman account
+      final response = await _supabase.auth.signUp(
         email: email.trim(),
         password: password,
       );
-      
-      if (userCredential.user != null) {
-        final uid = userCredential.user!.uid;
-        await _fetchUserData(uid);
 
-        // --- BEGIN: Hardcoded fallback for admin@gmail.com ---
-        if (_currentUser == null && email.trim().toLowerCase() == "admin@gmail.com") {
-          _currentUser = UserModel(
-            id: uid,
-            firstName: "Admin",
-            lastName: "User",
-            name: "Admin User",
-            email: email.trim(),
-            phone: '',
-            userType: 'coastguard', // treat as admin
-            registrationDate: DateTime.now(),
-            isActive: true,
-          );
-          await SharedPreferencesHelper.saveUserData(_currentUser!);
-          return true;
-        }
-        // --- END: Hardcoded fallback for admin@gmail.com ---
+      if (response.user != null) {
+        final userId = response.user!.id;
 
-        return _currentUser != null;
+        // Create fisherman profile
+        final fishermanData = {
+          'id': userId,
+          'email': email.trim(),
+          'first_name': firstName,
+          'last_name': lastName,
+          'name': '$firstName $lastName',
+          'phone': phone,
+          'user_type': 'fisherman',
+          'registration_date': DateTime.now().toIso8601String(),
+          'is_active': true,
+          if (profileImageUrl != null) 'profile_image_url': profileImageUrl,
+          if (address != null) 'address': address,
+          if (fishingArea != null) 'fishing_area': fishingArea,
+          if (emergencyContactPerson != null) 'emergency_contact_person': emergencyContactPerson,
+        };
+
+        await _supabase.from('fishermen').insert(fishermanData);
+
+        // Create boat record
+        final boatData = {
+          'id': 'boat_${DateTime.now().millisecondsSinceEpoch}',
+          'owner_id': userId,
+          'name': boatName,
+          'type': boatType,
+          'registration_number': boatRegistrationNumber,
+          'capacity': int.tryParse(boatCapacity) ?? 0,
+          'registration_date': DateTime.now().toIso8601String(),
+          'is_active': true,
+        };
+
+        await _supabase.from('boats').insert(boatData);
+
+        return true;
       }
+
       return false;
-    } on FirebaseAuthException catch (e) {
-      throw _getAuthErrorMessage(e.code);
+    } on AuthException catch (e) {
+      throw _getAuthErrorMessage(e.message);
     } catch (e) {
-      throw 'An unexpected error occurred. Please check your connection.';
+      throw 'Boat registration failed. Please check your connection.';
     }
   }
 
-  Future<void> openWebLogin() async {
-    final url = Uri.parse('https://sos-alert-b187f.web.app/login');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      throw 'Could not open web login page';
+  // Fetch user data from database
+  Future<void> _fetchUserData(String userId) async {
+    try {
+      // Try to fetch from fishermen table first
+      final fishermanResponse = await _supabase
+          .from('fishermen')
+          .select()
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (fishermanResponse != null) {
+        _currentUser = UserModel.fromMap(fishermanResponse);
+        await SharedPreferencesHelper.saveUserData(_currentUser!);
+        return;
+      }
+
+      // Try to fetch from coastguards table
+      final coastguardResponse = await _supabase
+          .from('coastguards')
+          .select()
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (coastguardResponse != null) {
+        _currentUser = UserModel.fromMap(coastguardResponse);
+        await SharedPreferencesHelper.saveUserData(_currentUser!);
+        return;
+      }
+
+      // If not found in either table, create a basic user object
+      final authUser = _supabase.auth.currentUser;
+      if (authUser != null) {
+        _currentUser = UserModel(
+          id: authUser.id,
+          firstName: authUser.userMetadata?['first_name'] ?? 'User',
+          lastName: authUser.userMetadata?['last_name'] ?? '',
+          name: authUser.userMetadata?['name'] ?? 'User',
+          email: authUser.email ?? '',
+          phone: authUser.userMetadata?['phone'] ?? '',
+          userType: 'fisherman', // Default type
+          registrationDate: DateTime.now(),
+          isActive: true,
+          createdAt: DateTime.now(),
+        );
+        await SharedPreferencesHelper.saveUserData(_currentUser!);
+      }
+    } catch (e) {
+      print('Error fetching user data: $e');
     }
   }
 
+  // Logout
   Future<void> logout() async {
     try {
-      await _auth.signOut();
+      await _supabase.auth.signOut();
       _currentUser = null;
       await SharedPreferencesHelper.clearUserData();
     } catch (e) {
-      throw 'Logout failed';
+      print('Error during logout: $e');
     }
   }
 
-  // Register fisherman - updated to use subcollection
-  Future<bool> register(UserModel user, String password) async {
+  // Get user boats (for fishermen)
+  Future<List<Map<String, dynamic>>> getUserBoats(String userId) async {
     try {
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: user.email,
-        password: password,
-      );
-      
-      if (userCredential.user != null) {
-        final uid = userCredential.user!.uid;
-        
-        if (user.userType == 'fisherman') {
-          final fishermenData = {
-            'id': uid,
-            'firstName': user.firstName ?? '',
-            'middleName': user.middleName,
-            'lastName': user.lastName ?? '',
-            'email': user.email,
-            'phone': user.phone,
-            'address': user.address ?? '',
-            'fishingArea': user.fishingArea ?? '',
-            'emergencyContactPerson': user.emergencyContactPerson ?? '',
-            'isActive': true,
-            'registrationDate': Timestamp.now(),
-          };
-          
-          await _firestore
-              .collection('users')
-              .doc(uid)
-              .collection('fishermen')
-              .doc(uid)
-              .set(fishermenData);
-        } else if (user.userType == 'coastguard') {
-          final coastguardData = {
-            'id': uid,
-            'firstName': user.firstName ?? '',
-            'middleName': user.middleName,
-            'lastName': user.lastName ?? '',
-            'email': user.email,
-            'isActive': true,
-            'registrationDate': Timestamp.now(),
-          };
-          
-          await _firestore
-              .collection('users')
-              .doc(uid)
-              .collection('coastguards')
-              .doc(uid)
-              .set(coastguardData);
-        }
-        
-        await _fetchUserData(uid);
-        return true;
-      }
-      return false;
-    } on FirebaseAuthException catch (e) {
-      throw _getAuthErrorMessage(e.code);
+      final response = await _supabase
+          .from('boats')
+          .select()
+          .eq('owner_id', userId)
+          .eq('is_active', true);
+
+      return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      throw 'Registration failed. Please check your connection.';
+      print('Error fetching user boats: $e');
+      return [];
     }
   }
 
-  Future<bool> isLoggedIn() async {
-    if (_currentUser != null) return true;
-    if (_auth.currentUser != null) {
-      await _fetchUserData(_auth.currentUser!.uid);
-      return _currentUser != null;
-    }
-    return false;
-  }
-
-  // Updated to fetch from correct subcollection based on user type
-  Future<void> _fetchUserData(String uid) async {
+  // Get all boats (for admin)
+  Future<List<Map<String, dynamic>>> getAllBoats() async {
     try {
-      // Try to fetch from coastguards subcollection first
-      DocumentSnapshot coastguardDoc = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('coastguards')
-          .doc(uid)
-          .get();
+      final response = await _supabase
+          .from('boats')
+          .select('*, fishermen(*)')
+          .eq('is_active', true);
 
-      if (coastguardDoc.exists && coastguardDoc.data() != null) {
-        final data = coastguardDoc.data() as Map<String, dynamic>;
-        _currentUser = UserModel(
-          id: data['id'],
-          firstName: data['firstName'],
-          middleName: data['middleName'],
-          lastName: data['lastName'],
-          name: "${data['firstName']}${data['middleName'] != null && data['middleName'].toString().isNotEmpty ? ' ${data['middleName']}' : ''} ${data['lastName']}",
-          email: data['email'],
-          phone: '',
-          userType: 'coastguard',
-          registrationDate: (data['registrationDate'] as Timestamp).toDate(),
-          isActive: data['isActive'] ?? true,
-        );
-        await SharedPreferencesHelper.saveUserData(_currentUser!);
-        return;
-      }
-
-      // Try to fetch from fishermen subcollection
-      DocumentSnapshot fishermenDoc = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('fishermen')
-          .doc(uid)
-          .get();
-
-      if (fishermenDoc.exists && fishermenDoc.data() != null) {
-        final data = fishermenDoc.data() as Map<String, dynamic>;
-        _currentUser = UserModel(
-          id: data['id'],
-          firstName: data['firstName'],
-          middleName: data['middleName'],
-          lastName: data['lastName'],
-          name: "${data['firstName']}${data['middleName'] != null && data['middleName'].toString().isNotEmpty ? ' ${data['middleName']}' : ''} ${data['lastName']}",
-          email: data['email'],
-          phone: data['phone'] ?? '',
-          userType: 'fisherman',
-          registrationDate: (data['registrationDate'] as Timestamp).toDate(),
-          isActive: data['isActive'] ?? true,
-          address: data['address'],
-          fishingArea: data['fishingArea'],
-          emergencyContactPerson: data['emergencyContactPerson'],
-        );
-        await SharedPreferencesHelper.saveUserData(_currentUser!);
-        return;
-      }
-
-      // If user not found in either subcollection, create a basic user model
-      final user = _auth.currentUser;
-      if (user != null) {
-        _currentUser = UserModel(
-          id: uid,
-          name: user.displayName ?? user.email?.split('@')[0] ?? 'User',
-          email: user.email ?? '',
-          phone: '',
-          userType: 'fisherman', // Default to fisherman
-          registrationDate: DateTime.now(),
-          isActive: true,
-        );
-      }
+      return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      try {
-        final userData = await SharedPreferencesHelper.getUserData();
-        if (userData != null && userData.id == uid) {
-          _currentUser = userData;
-        }
-      } catch (_) {
-        if (kDebugMode) {
-          print('Error fetching user data: $e');
-        }
-      }
+      print('Error fetching all boats: $e');
+      return [];
     }
   }
 
-  String _getAuthErrorMessage(String code) {
-    switch (code) {
-      case 'user-not-found': return 'No account found with this email address';
-      case 'wrong-password': return 'Incorrect password';
-      case 'invalid-credential': return 'Invalid email or password';
-      case 'email-already-in-use': return 'An account with this email already exists';
-      case 'weak-password': return 'Password is too weak (minimum 6 characters)';
-      case 'invalid-email': return 'Please enter a valid email address';
-      case 'user-disabled': return 'This account has been disabled';
-      case 'too-many-requests': return 'Too many failed attempts. Please try again later';
-      case 'network-request-failed': return 'Network error. Please check your internet connection';
-      default: return 'Login failed. Please check your credentials and try again';
+  // Get all fishermen
+  Future<List<Map<String, dynamic>>> getAllFishermen() async {
+    try {
+      final response = await _supabase
+          .from('fishermen')
+          .select()
+          .eq('is_active', true);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error fetching fishermen: $e');
+      return [];
     }
   }
 
+  // Get all coastguards
+  Future<List<Map<String, dynamic>>> getAllCoastguards() async {
+    try {
+      final response = await _supabase
+          .from('coastguards')
+          .select()
+          .eq('is_active', true);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error fetching coastguards: $e');
+      return [];
+    }
+  }
+
+  // Reset password - sends password reset email
   Future<void> resetPassword(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email.trim());
-    } on FirebaseAuthException catch (e) {
-      throw _getAuthErrorMessage(e.code);
+      // Don't allow password reset for hardcoded admin account
+      if (email.trim().toLowerCase() == _adminEmail) {
+        throw 'Password reset is not available for this account. Please contact your administrator.';
+      }
+
+      // Use Supabase password reset with timeout
+      await _supabase.auth.resetPasswordForEmail(
+        email.trim(),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw 'Connection timeout. Please check your internet connection and try again.';
+        },
+      );
+    } on TimeoutException {
+      throw 'Connection timeout. Please check your internet connection and try again.';
+    } on SocketException catch (e) {
+      throw 'Network error. Please check your internet connection: ${e.message}';
+    } on AuthException catch (e) {
+      throw _getAuthErrorMessage(e.message);
+    } catch (e) {
+      final errorMessage = e.toString();
+      if (errorMessage.contains('timeout') || errorMessage.contains('ClientException')) {
+        throw 'Unable to connect to the server. Please check your internet connection.';
+      } else if (errorMessage.contains('Invalid email')) {
+        throw 'Please enter a valid email address.';
+      } else {
+        throw _getAuthErrorMessage(errorMessage);
+      }
     }
   }
 
-  Future<void> updateProfile(UserModel user) async {
-    try {
-      // Determine which subcollection to update based on user type
-      String subcollection = user.userType == 'coastguard' ? 'coastguards' : 'fishermen';
-      
-      Map<String, dynamic> updateData;
-      
-      if (user.userType == 'coastguard') {
-        updateData = {
-          'id': user.id,
-          'firstName': user.firstName,
-          'middleName': user.middleName,
-          'lastName': user.lastName,
-          'email': user.email,
-          'isActive': user.isActive,
-          'registrationDate': Timestamp.fromDate(user.registrationDate),
-        };
-      } else {
-        updateData = {
-          'id': user.id,
-          'firstName': user.firstName,
-          'middleName': user.middleName,
-          'lastName': user.lastName,
-          'email': user.email,
-          'phone': user.phone,
-          'address': user.address,
-          'fishingArea': user.fishingArea,
-          'emergencyContactPerson': user.emergencyContactPerson,
-          'isActive': user.isActive,
-          'registrationDate': Timestamp.fromDate(user.registrationDate),
-        };
-      }
-      
-      await _firestore
-        .collection('users')
-        .doc(user.id)
-        .collection(subcollection)
-        .doc(user.id)
-        .update(updateData);
-      _currentUser = user;
-      await SharedPreferencesHelper.saveUserData(user);
-    } catch (e) {
-      throw 'Profile update failed. Please check your connection.';
+  // Helper method to convert auth error messages
+  String _getAuthErrorMessage(String message) {
+    if (message.contains('Invalid login credentials')) {
+      return 'Invalid email or password.';
+    } else if (message.contains('User already registered')) {
+      return 'An account with this email already exists.';
+    } else if (message.contains('Password should be at least')) {
+      return 'Password must be at least 6 characters long.';
+    } else if (message.contains('Invalid email')) {
+      return 'Please enter a valid email address.';
+    } else if (message.contains('User not found') || message.contains('does not exist')) {
+      return 'No account found with this email address.';
+    } else {
+      return message;
     }
   }
+
+  // Web login (for future implementation)
+  Future<void> openWebLogin() async {
+    throw 'Web login not implemented yet';
+  }
 }
+

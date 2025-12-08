@@ -11,7 +11,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double elevation;
 
   const CustomAppBar({
-    Key? key,
+    super.key,
     required this.title,
     this.actions,
     this.leading,
@@ -19,7 +19,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.elevation = 0,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +34,24 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: backgroundColor ?? AppColors.primaryColor,
       foregroundColor: foregroundColor ?? AppColors.whiteColor,
       elevation: elevation,
-      leading: leading,
+      leading: leading ?? (automaticallyImplyLeading ? Builder(
+        builder: (context) {
+          final canPop = Navigator.of(context).canPop();
+          return IconButton(
+            icon: Icon(
+              canPop ? Icons.arrow_back : Icons.menu,
+              color: foregroundColor ?? AppColors.whiteColor,
+            ),
+            onPressed: () {
+              if (canPop) {
+                Navigator.of(context).pop();
+              } else {
+                Scaffold.of(context).openDrawer();
+              }
+            },
+          );
+        },
+      ) : null),
       automaticallyImplyLeading: automaticallyImplyLeading,
       actions: actions,
       iconTheme: IconThemeData(

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../constants/colors.dart';
 import '../admin/admin_drawer.dart';
-import '../../widgets/admin/map_widget.dart';
+import '../../widgets/admin/map_widget_simple.dart';
 
 class NavigationPage extends StatelessWidget {
-  const NavigationPage({Key? key}) : super(key: key);
+  const NavigationPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +34,7 @@ class NavigationPage extends StatelessWidget {
             const SizedBox(width: 16),
             // App title
             Text(
-              "BantayDagat",
+              "Salbar_Mangirisda",
               style: const TextStyle(
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,
@@ -48,10 +48,22 @@ class NavigationPage extends StatelessWidget {
         elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
         leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: AppColors.textPrimary),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
+          builder: (context) {
+            final canPop = Navigator.of(context).canPop();
+            return IconButton(
+              icon: Icon(
+                canPop ? Icons.arrow_back : Icons.menu,
+                color: AppColors.textPrimary,
+              ),
+              onPressed: () {
+                if (canPop) {
+                  Navigator.of(context).pop();
+                } else {
+                  Scaffold.of(context).openDrawer();
+                }
+              },
+            );
+          },
         ),
       ),
       drawer: const AdminDrawer(),
@@ -85,7 +97,7 @@ class NavigationPage extends StatelessWidget {
                 Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: const MapWidget(),
+                    child: const MapWidgetSimple(),
                   ),
                 ),
               ],

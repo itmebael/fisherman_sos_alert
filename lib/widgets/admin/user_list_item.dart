@@ -9,12 +9,12 @@ class UserListItem extends StatelessWidget {
   final VoidCallback? onDelete;
 
   const UserListItem({
-    Key? key,
+    super.key,
     required this.user,
     this.onTap,
     this.onEdit,
     this.onDelete,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +29,7 @@ class UserListItem extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: AppColors.primaryColor,
           child: Text(
-            user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+            (user.name?.isNotEmpty ?? false) ? user.name![0].toUpperCase() : 'U',
             style: const TextStyle(
               color: AppColors.whiteColor,
               fontWeight: FontWeight.bold,
@@ -37,7 +37,7 @@ class UserListItem extends StatelessWidget {
           ),
         ),
         title: Text(
-          user.name,
+          user.name ?? user.fullName,
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -48,7 +48,7 @@ class UserListItem extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              user.email,
+              user.email ?? 'No email',
               style: const TextStyle(
                 fontSize: 14,
                 color: AppColors.textSecondary,
@@ -72,23 +72,6 @@ class UserListItem extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                if (user.boatId != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'BOAT: ${user.boatId}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primaryColor,
-                      ),
-                    ),
-                  ),
               ],
             ),
           ],

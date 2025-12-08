@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../constants/colors.dart';
-import '../../constants/strings.dart';
 import '../../constants/routes.dart';
 import '../admin/admin_drawer.dart';
 import '../../services/database_service.dart';
 import '../../models/user_with_boat_model.dart';
-import '../../widgets/common/loading_widget.dart';
 import '../../utils/date_formatter.dart';
 
 class UsersPage extends StatefulWidget {
-  const UsersPage({Key? key}) : super(key: key);
+  const UsersPage({super.key});
 
   @override
   State<UsersPage> createState() => _UsersPageState();
@@ -61,10 +60,22 @@ class _UsersPageState extends State<UsersPage> {
         elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
         leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: AppColors.textPrimary),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
+          builder: (context) {
+            final canPop = Navigator.of(context).canPop();
+            return IconButton(
+              icon: Icon(
+                canPop ? Icons.arrow_back : Icons.menu,
+                color: AppColors.textPrimary,
+              ),
+              onPressed: () {
+                if (canPop) {
+                  Navigator.of(context).pop();
+                } else {
+                  Scaffold.of(context).openDrawer();
+                }
+              },
+            );
+          },
         ),
       ),
       drawer: const AdminDrawer(),
@@ -159,8 +170,8 @@ class _UsersPageState extends State<UsersPage> {
                         ),
                       ],
                     ),
-                    child: StreamBuilder<List<UserWithBoatModel>>(
-                      stream: _databaseService.getAllUsersWithBoats(),
+                    child: FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _databaseService.getAllUsersWithBoats(),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
                           return const Center(child: CircularProgressIndicator());
@@ -195,10 +206,10 @@ class _UsersPageState extends State<UsersPage> {
                         // Filter users based on search query
                         final filteredUsers = _searchQuery.isEmpty 
                             ? users 
-                            : users.where((userWithBoat) =>
-                                userWithBoat.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                                userWithBoat.user.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                                userWithBoat.boatNumber.toLowerCase().contains(_searchQuery.toLowerCase())
+                            : users.where((userData) =>
+                                (userData['name'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                                (userData['email'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                                (userData['boats']?[0]?['name'] ?? '').toLowerCase().contains(_searchQuery.toLowerCase())
                               ).toList();
 
                         if (filteredUsers.isEmpty) {
@@ -239,7 +250,7 @@ class _UsersPageState extends State<UsersPage> {
 }
 
 class _UsersTable extends StatelessWidget {
-  final List<UserWithBoatModel> users;
+  final List<Map<String, dynamic>> users;
 
   const _UsersTable({required this.users});
 
@@ -317,12 +328,14 @@ class _UsersTable extends StatelessWidget {
             itemCount: users.length,
             itemBuilder: (context, index) {
               final userWithBoat = users[index];
+              // Convert Map to UserWithBoatModel
+              final userModel = UserWithBoatModel.fromMap(userWithBoat);
               return _UserTableRow(
-                userWithBoat: userWithBoat,
+                userWithBoat: userModel,
                 onToggleStatus: () => _toggleUserStatus(context, userWithBoat),
-                onView: () => _viewUser(context, userWithBoat),
-                onEdit: () => _editUser(context, userWithBoat),
-                onDelete: () => _deleteUser(context, userWithBoat),
+                onView: () => _viewUser(context, userModel),
+                onEdit: () => _editUser(context, userModel),
+                onDelete: () => _deleteUser(context, userModel),
               );
             },
           ),
@@ -331,20 +344,21 @@ class _UsersTable extends StatelessWidget {
     );
   }
 
-  void _toggleUserStatus(BuildContext context, UserWithBoatModel userWithBoat) async {
+  void _toggleUserStatus(BuildContext context, Map<String, dynamic> userData) async {
     try {
       final databaseService = DatabaseService();
+      final isActive = userData['is_active'] ?? true;
       await databaseService.updateFishermanStatus(
-        userWithBoat.userId, 
-        !userWithBoat.isActive
+        userData['id'], 
+        !isActive
       );
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${userWithBoat.fullName} is now ${!userWithBoat.isActive ? 'Active' : 'Inactive'}',
+            '${userData['name']} is now ${!isActive ? 'Active' : 'Inactive'}',
           ),
-          backgroundColor: !userWithBoat.isActive ? Colors.green : Colors.orange,
+          backgroundColor: !isActive ? Colors.green : Colors.orange,
         ),
       );
     } catch (e) {
@@ -593,27 +607,41 @@ class _UserDetailsDialog extends StatelessWidget {
 
   const _UserDetailsDialog({required this.userWithBoat});
 
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
+    try {
+      if (await canLaunchUrl(phoneUri)) {
+        await launchUrl(phoneUri);
+      } else {
+        throw 'Could not launch phone call';
+      }
+    } catch (e) {
+      // Handle error - phone call not available
+      print('Error making phone call: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = userWithBoat.user;
     final boat = userWithBoat.boat;
     
     return AlertDialog(
-      title: Text(user.name),
+      title: Text(user.name ?? user.fullName),
       content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             _DetailRow('User ID', user.displayId ?? user.id),
-            _DetailRow('Email', user.email),
-            _DetailRow('Phone', user.phone),
+            _DetailRow('Email', user.email ?? 'N/A'),
+            _DetailRow('Phone', user.phone ?? 'N/A'),
             _DetailRow('Address', user.address ?? 'N/A'),
             _DetailRow('Fishing Area', user.fishingArea ?? 'N/A'),
             _DetailRow('Emergency Contact', user.emergencyContactPerson ?? 'N/A'),
-            _DetailRow('Registration Date', DateFormatter.formatDate(user.registrationDate)),
+            _DetailRow('Registration Date', DateFormatter.formatDate(user.registrationDate ?? DateTime.now())),
             _DetailRow('Last Active', user.lastActiveDisplay),
-            _DetailRow('Status', user.isActive ? 'Active' : 'Inactive'),
+            _DetailRow('Status', (user.isActive ?? false) ? 'Active' : 'Inactive'),
             const SizedBox(height: 16),
             const Text(
               'Boat Information:',
@@ -641,6 +669,16 @@ class _UserDetailsDialog extends StatelessWidget {
         ),
       ),
       actions: [
+        if (user.phone != null && user.phone!.isNotEmpty)
+          ElevatedButton.icon(
+            onPressed: () => _makePhoneCall(user.phone!),
+            icon: const Icon(Icons.phone, size: 18),
+            label: const Text('Call'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+          ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),

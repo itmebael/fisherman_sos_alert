@@ -1,14 +1,13 @@
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
-import '../models/user_with_boat_model.dart';
 import '../models/sos_alert_model.dart';
 import '../services/database_service.dart';
 
 class AdminProvider with ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
   
-  List<UserWithBoatModel> _usersWithBoats = [];
-  List<SOSAlertModel> _rescueNotifications = [];
+  List<Map<String, dynamic>> _usersWithBoats = [];
+  final List<SOSAlertModel> _rescueNotifications = [];
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -18,8 +17,8 @@ class AdminProvider with ChangeNotifier {
   int _totalRescued = 0;
 
   // Getters
-  List<UserWithBoatModel> get usersWithBoats => _usersWithBoats;
-  List<UserModel> get users => _usersWithBoats.map((uwb) => uwb.user).toList(); // For backward compatibility
+  List<Map<String, dynamic>> get usersWithBoats => _usersWithBoats;
+  List<UserModel> get users => _usersWithBoats.map((uwb) => UserModel.fromMap(uwb)).toList(); // For backward compatibility
   List<SOSAlertModel> get rescueNotifications => _rescueNotifications;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -30,7 +29,7 @@ class AdminProvider with ChangeNotifier {
   int get totalRescued => _totalRescued;
   
   // Legacy getters for backward compatibility
-  int get activeUsers => _usersWithBoats.where((uwb) => uwb.isActive).length;
+  int get activeUsers => _usersWithBoats.where((uwb) => uwb['is_active'] == true).length;
   int get pendingRescues => _rescueNotifications.where((alert) => alert.status == 'pending').length;
 
   // Load dashboard counts
@@ -40,16 +39,27 @@ class AdminProvider with ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      // Load all counts concurrently
-      final results = await Future.wait([
-        _databaseService.getTotalUsersCount(),
-        _databaseService.getTotalBoatsCount(),
-        _databaseService.getTotalRescuedCount(),
-      ]);
+      // Load all counts with individual error handling
+      try {
+        _totalUsers = await _databaseService.getTotalUsersCount();
+      } catch (e) {
+        print('Error loading users count: $e');
+        _totalUsers = 0;
+      }
 
-      _totalUsers = results[0];
-      _totalBoats = results[1];
-      _totalRescued = results[2];
+      try {
+        _totalBoats = await _databaseService.getTotalBoatsCount();
+      } catch (e) {
+        print('Error loading boats count: $e');
+        _totalBoats = 0;
+      }
+
+      try {
+        _totalRescued = await _databaseService.getTotalRescuedCount();
+      } catch (e) {
+        print('Error loading rescued count: $e');
+        _totalRescued = 0;
+      }
 
       _isLoading = false;
       notifyListeners();
@@ -72,19 +82,11 @@ class AdminProvider with ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      // Get stream of users with boats
-      _databaseService.getAllUsersWithBoats().listen(
-        (usersWithBoats) {
-          _usersWithBoats = usersWithBoats;
-          _isLoading = false;
-          notifyListeners();
-        },
-        onError: (error) {
-          _errorMessage = error.toString();
-          _isLoading = false;
-          notifyListeners();
-        },
-      );
+      // Get users with boats
+      final usersWithBoats = await _databaseService.getAllUsersWithBoats();
+      _usersWithBoats = usersWithBoats;
+      _isLoading = false;
+      notifyListeners();
     } catch (e) {
       _isLoading = false;
       _errorMessage = e.toString();
@@ -112,8 +114,8 @@ class AdminProvider with ChangeNotifier {
   // Toggle user status (for backward compatibility)
   Future<void> toggleUserStatus(String userId) async {
     try {
-      final userWithBoat = _usersWithBoats.firstWhere((uwb) => uwb.userId == userId);
-      await updateUserStatus(userId, !userWithBoat.isActive);
+      final userWithBoat = _usersWithBoats.firstWhere((uwb) => uwb['user_id'] == userId);
+      await updateUserStatus(userId, !(userWithBoat['is_active'] == true));
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();
@@ -164,8 +166,8 @@ class AdminProvider with ChangeNotifier {
   // Legacy method for backward compatibility
   Future<void> deleteUser(String userId) async {
     try {
-      final userWithBoat = _usersWithBoats.firstWhere((uwb) => uwb.userId == userId);
-      await deleteUserWithBoat(userId, userWithBoat.boatId);
+      final userWithBoat = _usersWithBoats.firstWhere((uwb) => uwb['user_id'] == userId);
+      await deleteUserWithBoat(userId, userWithBoat['boat_id']);
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();
@@ -207,30 +209,33 @@ class AdminProvider with ChangeNotifier {
   }
 
   // Search and filter methods
-  List<UserWithBoatModel> searchUsersWithBoats(String query) {
+  List<Map<String, dynamic>> searchUsersWithBoats(String query) {
     if (query.isEmpty) return _usersWithBoats;
     return _usersWithBoats.where((uwb) =>
-      uwb.fullName.toLowerCase().contains(query.toLowerCase()) ||
-      uwb.user.email.toLowerCase().contains(query.toLowerCase()) ||
-      uwb.boatNumber.toLowerCase().contains(query.toLowerCase())
+      (uwb['full_name'] ?? '').toLowerCase().contains(query.toLowerCase()) ||
+      (uwb['email'] ?? '').toLowerCase().contains(query.toLowerCase()) ||
+      (uwb['boat_number'] ?? '').toLowerCase().contains(query.toLowerCase())
     ).toList();
   }
 
-  List<UserWithBoatModel> filterUsersByStatus(bool? isActive) {
+  List<Map<String, dynamic>> filterUsersByStatus(bool? isActive) {
     if (isActive == null) return _usersWithBoats;
-    return _usersWithBoats.where((uwb) => uwb.isActive == isActive).toList();
+    return _usersWithBoats.where((uwb) => uwb['is_active'] == isActive).toList();
   }
 
-  List<UserWithBoatModel> filterUsersByBoatStatus(bool hasBoat) {
-    return _usersWithBoats.where((uwb) => uwb.hasBoat == hasBoat).toList();
+  List<Map<String, dynamic>> filterUsersByBoatStatus(bool hasBoat) {
+    return _usersWithBoats.where((uwb) => uwb['has_boat'] == hasBoat).toList();
   }
 
   // Get users who haven't been active for specified days
-  List<UserWithBoatModel> getInactiveUsers(int daysSinceLastActive) {
+  List<Map<String, dynamic>> getInactiveUsers(int daysSinceLastActive) {
     final cutoffDate = DateTime.now().subtract(Duration(days: daysSinceLastActive));
-    return _usersWithBoats.where((uwb) => 
-      uwb.user.lastActive == null || uwb.user.lastActive!.isBefore(cutoffDate)
-    ).toList();
+    return _usersWithBoats.where((uwb) {
+      final lastActive = uwb['last_active'];
+      if (lastActive == null) return true;
+      final lastActiveDate = DateTime.tryParse(lastActive);
+      return lastActiveDate == null || lastActiveDate.isBefore(cutoffDate);
+    }).toList();
   }
 
   void clearError() {
@@ -239,23 +244,23 @@ class AdminProvider with ChangeNotifier {
   }
 
   // Get user with boat by ID
-  UserWithBoatModel? getUserWithBoatById(String id) {
+  Map<String, dynamic>? getUserWithBoatById(String id) {
     try {
-      return _usersWithBoats.firstWhere((uwb) => uwb.userId == id);
+      return _usersWithBoats.firstWhere((uwb) => uwb['user_id'] == id);
     } catch (e) {
       return null;
     }
   }
 
   // Get users with boats only
-  List<UserWithBoatModel> getUsersWithBoats() {
-    return _usersWithBoats.where((uwb) => uwb.hasBoat).toList();
+  List<Map<String, dynamic>> getUsersWithBoats() {
+    return _usersWithBoats.where((uwb) => uwb['has_boat'] == true).toList();
   }
 
   // Get active fishermen with boats
-  List<UserWithBoatModel> getActiveFishermenWithBoats() {
+  List<Map<String, dynamic>> getActiveFishermenWithBoats() {
     return _usersWithBoats.where((uwb) => 
-      uwb.user.userType == 'fisherman' && uwb.isActive && uwb.hasBoat
+      uwb['user_type'] == 'fisherman' && uwb['is_active'] == true && uwb['has_boat'] == true
     ).toList();
   }
 }

@@ -4,7 +4,7 @@ import '../../constants/colors.dart';
 import '../../providers/sos_provider.dart';
 
 class SOSButton extends StatefulWidget {
-  const SOSButton({Key? key}) : super(key: key);
+  const SOSButton({super.key});
 
   @override
   _SOSButtonState createState() => _SOSButtonState();
@@ -128,7 +128,7 @@ class _SOSButtonState extends State<SOSButton>
             ],
           ),
           content: const Text(
-            'Are you sure you want to send an emergency alert to BantayDagat Coast Guard?\n\nThis will immediately notify the nearest coast guard station of your location and emergency status.',
+            'Are you sure you want to send an emergency alert to Salbar_Mangirisda Coast Guard?\n\nThis will immediately notify the nearest coast guard station of your location and emergency status.',
             style: TextStyle(fontSize: 16, height: 1.4),
           ),
           actions: [
@@ -146,10 +146,17 @@ class _SOSButtonState extends State<SOSButton>
               ),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(context).pop();
-                sosProvider.sendSOSAlert();
-                _showSOSConfirmationSnackbar(context);
+                try {
+                  print('Starting SOS alert process...');
+                  await sosProvider.sendSOSAlert();
+                  print('SOS alert completed successfully');
+                  _showSOSConfirmationSnackbar(context);
+                } catch (e) {
+                  print('SOS alert failed: $e');
+                  _showSOSErrorSnackbar(context, e.toString());
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.sosButtonColor,
@@ -185,7 +192,7 @@ class _SOSButtonState extends State<SOSButton>
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
-                'SOS Alert sent to BantayDagat Coast Guard!',
+                'SOS Alert sent to Salbar_Mangirisda Coast Guard!',
                 style: TextStyle(fontSize: 16),
               ),
             ),
@@ -193,6 +200,34 @@ class _SOSButtonState extends State<SOSButton>
         ),
         backgroundColor: AppColors.successColor,
         duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
+  void _showSOSErrorSnackbar(BuildContext context, String error) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(
+              Icons.error,
+              color: Colors.white,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Failed to send SOS: ${error.length > 50 ? '${error.substring(0, 50)}...' : error}',
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),

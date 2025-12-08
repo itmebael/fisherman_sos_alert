@@ -1,81 +1,69 @@
 class SOSAlertModel {
   final String id;
   final String fishermanId;
-  final String fishermanName;
   final double latitude;
   final double longitude;
-  final DateTime alertTime;
+  final String? message;
   final String status;
-  final String? description;
-  final String? coastguardId;
-  final DateTime? responseTime;
+  final DateTime createdAt;
+  final DateTime? resolvedAt;
 
   SOSAlertModel({
     required this.id,
     required this.fishermanId,
-    required this.fishermanName,
     required this.latitude,
     required this.longitude,
-    required this.alertTime,
-    this.status = 'pending',
-    this.description,
-    this.coastguardId,
-    this.responseTime,
+    this.message,
+    this.status = 'active',
+    required this.createdAt,
+    this.resolvedAt,
   });
 
   factory SOSAlertModel.fromJson(Map<String, dynamic> json) {
     return SOSAlertModel(
       id: json['id'] ?? '',
-      fishermanId: json['fishermanId'] ?? '',
-      fishermanName: json['fishermanName'] ?? '',
+      fishermanId: json['fisherman_id'] ?? '',
       latitude: (json['latitude'] ?? 0.0).toDouble(),
       longitude: (json['longitude'] ?? 0.0).toDouble(),
-      alertTime: DateTime.parse(json['alertTime'] ?? DateTime.now().toIso8601String()),
-      status: json['status'] ?? 'pending',
-      description: json['description'],
-      coastguardId: json['coastguardId'],
-      responseTime: json['responseTime'] != null ? DateTime.parse(json['responseTime']) : null,
+      message: json['message'],
+      status: json['status'] ?? 'active',
+      createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      resolvedAt: json['resolved_at'] != null ? DateTime.parse(json['resolved_at']) : null,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'fishermanId': fishermanId,
-      'fishermanName': fishermanName,
+      'fisherman_id': fishermanId,
       'latitude': latitude,
       'longitude': longitude,
-      'alertTime': alertTime.toIso8601String(),
+      'message': message,
       'status': status,
-      'description': description,
-      'coastguardId': coastguardId,
-      'responseTime': responseTime?.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
+      'resolved_at': resolvedAt?.toIso8601String(),
     };
   }
 
   SOSAlertModel copyWith({
     String? id,
     String? fishermanId,
-    String? fishermanName,
     double? latitude,
     double? longitude,
-    DateTime? alertTime,
+    String? message,
     String? status,
-    String? description,
-    String? coastguardId,
-    DateTime? responseTime,
+    DateTime? createdAt,
+    DateTime? resolvedAt,
   }) {
     return SOSAlertModel(
       id: id ?? this.id,
       fishermanId: fishermanId ?? this.fishermanId,
-      fishermanName: fishermanName ?? this.fishermanName,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
-      alertTime: alertTime ?? this.alertTime,
+      message: message ?? this.message,
       status: status ?? this.status,
-      description: description ?? this.description,
-      coastguardId: coastguardId ?? this.coastguardId,
-      responseTime: responseTime ?? this.responseTime,
+      createdAt: createdAt ?? this.createdAt,
+      resolvedAt: resolvedAt ?? this.resolvedAt,
     );
   }
 }

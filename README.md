@@ -6,7 +6,7 @@ A Flutter application for emergency alert systems and location tracking, designe
 
 - **Admin Panel**: Coast Guard administrators can manage users, view reports, and monitor rescue operations
 - **Fisherman Interface**: Fishermen can access their accounts through the web interface
-- **Firebase Authentication**: Secure login system with role-based access control
+- **Supabase Authentication**: Secure login system with role-based access control
 - **Cross-Platform**: Works on mobile devices and web browsers
 
 ## Authentication System
@@ -21,12 +21,12 @@ A Flutter application for emergency alert systems and location tracking, designe
 - **Access**: Fisherman-specific features through web interface
 - **Mobile App**: Shows information about accessing web login
 
-## Firebase Integration
+## Supabase Integration
 
-The app uses Firebase for:
+The app uses Supabase for:
 - **Authentication**: User login and session management
-- **Firestore**: User data storage and management
-- **Hosting**: Web interface for fishermen
+- **Database**: PostgreSQL database for user data storage and management
+- **Real-time**: Real-time updates for SOS alerts and notifications
 
 ## Setup Instructions
 
@@ -35,9 +35,9 @@ The app uses Firebase for:
    flutter pub get
    ```
 
-2. **Firebase Configuration**
-   - Ensure `firebase_options.dart` is properly configured
-   - Firebase project should have Authentication and Firestore enabled
+2. **Supabase Configuration**
+   - Update `lib/supabase_config.dart` with your Supabase project credentials
+   - Supabase project should have Authentication and Database enabled
 
 3. **Run the Application**
    ```bash
@@ -55,26 +55,25 @@ lib/
 │   ├── admin/        # Admin panel screens
 │   ├── fisherman/    # Fisherman screens
 │   └── common/       # Shared screens (login, splash)
-├── services/          # Business logic and Firebase services
+├── services/          # Business logic and Supabase services
 ├── utils/             # Utility functions
 └── widgets/           # Reusable UI components
 ```
 
 ## Web Deployment
 
-The web interface for fishermen is deployed to Firebase Hosting at:
-`https://sos-alert-b187f.web.app/login`
+The web interface for fishermen can be deployed to any web hosting service.
 
 ## Security Features
 
 - Role-based access control
 - Admin-only mobile app access
-- Secure Firebase authentication
+- Secure Supabase authentication
 - Input validation and sanitization
 
 ## Dependencies
 
-- **Firebase**: Core, Auth, Firestore, Messaging
+- **Supabase**: Flutter client for authentication and database
 - **State Management**: Provider
 - **UI**: Material Design components
 - **Location**: Geolocator for GPS tracking

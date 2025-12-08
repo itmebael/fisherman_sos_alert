@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../constants/api_endpoints.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();

@@ -7,11 +7,11 @@ class ReportChart extends StatelessWidget {
   final double height;
 
   const ReportChart({
-    Key? key,
+    super.key,
     required this.title,
     required this.data,
     this.height = 200,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

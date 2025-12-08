@@ -1,18 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../constants/colors.dart';
 import '../../services/auth_service.dart'; 
-import '../../constants/strings.dart';
-import '../../widgets/common/custom_text_field.dart';
-import '../../widgets/common/custom_button.dart';
-import '../../widgets/common/custom_app_bar.dart';
 import '../../utils/validators.dart';
-import '../../models/user_model.dart';
 import '../../screens/admin/admin_drawer.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({Key? key}) : super(key: key);
+  const RegisterPage({super.key});
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -72,41 +65,23 @@ class _RegisterPageState extends State<RegisterPage> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      // Create Firebase Auth account first
-      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // Use AuthService to register admin
+      final authService = AuthService();
+      final success = await authService.register(
         email: email,
         password: password,
+        firstName: firstName,
+        lastName: lastName,
+        phone: '', // Admin doesn't need phone
+        userType: 'coastguard',
       );
 
-      final uid = userCredential.user!.uid;
-
-      // Create coastguard document in coastguards collection
-      final coastguardData = {
-        'id': uid, // Use Firebase UID as required by Firestore rules
-        'firstName': firstName,
-        'middleName': middleName.isEmpty ? null : middleName,
-        'lastName': lastName,
-        'email': email,
-        'isActive': true,
-        'registrationDate': Timestamp.now(),
-      };
-
-      // Save to coastguards collection as required by Firestore rules
-      await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('coastguards')
-        .doc(uid)
-        .set(coastguardData);
-
-      if (mounted) {
+      if (success && mounted) {
         _showSuccessDialog();
-      }
-    } on FirebaseAuthException catch (e) {
-      if (mounted) {
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Registration failed: ${_getAuthErrorMessage(e.code)}'),
+          const SnackBar(
+            content: Text('Registration failed. Please try again.'),
             backgroundColor: AppColors.errorColor,
           ),
         );
@@ -126,16 +101,6 @@ class _RegisterPageState extends State<RegisterPage> {
           _isLoading = false;
         });
       }
-    }
-  }
-
-  String _getAuthErrorMessage(String code) {
-    switch (code) {
-      case 'email-already-in-use': return 'An account with this email already exists';
-      case 'weak-password': return 'Password is too weak (minimum 6 characters)';
-      case 'invalid-email': return 'Please enter a valid email address';
-      case 'network-request-failed': return 'Network error. Please check your internet connection';
-      default: return 'Registration failed. Please try again';
     }
   }
 
@@ -286,7 +251,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  // BantayDagat logo
+                  // Sagip-Dagatnon logo
                   ClipOval(
                     child: Image.asset(
                       'assets/img/logo.png',
@@ -309,7 +274,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   // App Title
                   const Expanded(
                     child: Text(
-                      'BantayDagat',
+                      'Salbar_Mangirisda',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,

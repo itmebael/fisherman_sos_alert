@@ -8,11 +8,11 @@ class RescueNotificationCard extends StatelessWidget {
   final VoidCallback? onViewDetails;
 
   const RescueNotificationCard({
-    Key? key,
+    super.key,
     required this.alert,
     this.onRespond,
     this.onViewDetails,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +47,7 @@ class RescueNotificationCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        alert.fishermanName,
+                        'Fisherman ID: ${alert.fishermanId}',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -115,7 +115,7 @@ class RescueNotificationCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _formatTime(alert.alertTime),
+                  _formatTime(alert.createdAt),
                   style: const TextStyle(
                     fontSize: 14,
                     color: AppColors.textSecondary,
@@ -124,10 +124,10 @@ class RescueNotificationCard extends StatelessWidget {
               ],
             ),
             
-            if (alert.description != null && alert.description!.isNotEmpty) ...[
+            if (alert.message != null && alert.message!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                alert.description!,
+                alert.message!,
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textPrimary,

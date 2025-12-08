@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 
@@ -9,7 +9,7 @@ class AuthProvider with ChangeNotifier {
   UserModel? _currentUser;
   bool _isLoading = false;
   String? _errorMessage;
-  User? _firebaseUser;
+  User? _supabaseUser;
   bool _isAuthenticated = false;
   String? _adminPassword;
   String? get adminPassword => _adminPassword;
@@ -19,27 +19,28 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isLoggedIn => _isAuthenticated && _currentUser != null;
-  User? get firebaseUser => _firebaseUser;
+  User? get supabaseUser => _supabaseUser;
   bool get isAdmin => _currentUser?.userType == 'coastguard';
   bool get isFisherman => _currentUser?.userType == 'fisherman';
 
-  // Initialize auth state listener (keeps app synced with Firebase login state)
+  // Initialize auth state listener (keeps app synced with auth state)
   void initializeAuthListener() {
-    _authService.authStateChanges.listen((User? user) async {
-      _firebaseUser = user;
-      if (user != null) {
-        await _fetchUserData(user.uid);
+    _authService.authStateChanges.listen((data) async {
+      if (data.session != null) {
         _isAuthenticated = true;
+        _currentUser = _authService.currentUser;
+        _supabaseUser = data.session!.user;
       } else {
-        _currentUser = null;
         _isAuthenticated = false;
+        _currentUser = null;
+        _supabaseUser = null;
       }
       notifyListeners();
     });
   }
 
   // Login
- Future<bool> login(String email, String password) async {
+  Future<bool> login(String email, String password) async {
     try {
       _setLoading(true);
       _clearError();
@@ -47,9 +48,9 @@ class AuthProvider with ChangeNotifier {
       final success = await _authService.login(email, password);
       if (success) {
         _currentUser = _authService.currentUser;
-        _firebaseUser = _authService.firebaseUser;
+        // _supabaseUser will be set by the auth state listener
         _isAuthenticated = true;
-        _adminPassword = password; // <--- STORE IT HERE
+        _adminPassword = password; // Store it here
       }
 
       _setLoading(false);
@@ -61,7 +62,6 @@ class AuthProvider with ChangeNotifier {
       return false;
     }
   }
-
 
   // Web login (for fisherman accounts, if needed)
   Future<void> openWebLogin() async {
@@ -85,7 +85,7 @@ class AuthProvider with ChangeNotifier {
 
       await _authService.logout();
       _currentUser = null;
-      _firebaseUser = null;
+      _supabaseUser = null;
       _isAuthenticated = false;
       _clearError();
 
@@ -97,53 +97,30 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Register - Updated to use the new AuthService registerAdmin method for coastguards
-  Future<bool> register(UserModel user, String password) async {
-    try {
-      _setLoading(true);
-      _clearError();
-
-      final success = await _authService.register(user, password);
-      if (success) {
-        _currentUser = _authService.currentUser;
-        _firebaseUser = _authService.firebaseUser;
-        _isAuthenticated = true;
-      } else {
-        _setError('Registration failed');
-      }
-
-      _setLoading(false);
-      return success;
-    } catch (e) {
-      _setLoading(false);
-      _setError(e.toString());
-      return false;
-    }
-  }
-
-  // Register Admin/Coastguard - New method to use the dedicated registerAdmin
-  Future<bool> registerAdmin({
-    required String firstName,
-    String? middleName,
-    required String lastName,
+  // Register - Updated to use the new AuthService register method
+  Future<bool> register({
     required String email,
     required String password,
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String userType,
   }) async {
     try {
       _setLoading(true);
       _clearError();
 
-      final success = await _authService.registerAdmin(
-        firstName: firstName,
-        middleName: middleName,
-        lastName: lastName,
+      final success = await _authService.register(
         email: email,
         password: password,
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        userType: userType,
       );
-
+      
       if (success) {
         _currentUser = _authService.currentUser;
-        _firebaseUser = _authService.firebaseUser;
         _isAuthenticated = true;
       } else {
         _setError('Registration failed');
@@ -158,42 +135,8 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Check auth status (useful for splash screen)
-  Future<void> checkAuthStatus() async {
-    try {
-      final isLoggedIn = await _authService.isLoggedIn();
-      if (isLoggedIn) {
-        _currentUser = _authService.currentUser;
-        _firebaseUser = _authService.firebaseUser;
-        _isAuthenticated = true;
-      } else {
-        _currentUser = null;
-        _isAuthenticated = false;
-      }
-      notifyListeners();
-    } catch (e) {
-      if (kDebugMode) {
-        print('Auth status check error: $e');
-      }
-      _isAuthenticated = false;
-      notifyListeners();
-    }
-  }
 
-  // Fetch user data from Firestore - Updated to work with new collection structure
-  Future<void> _fetchUserData(String uid) async {
-    try {
-      // Force AuthService to fetch fresh data from Firestore
-      await _authService.isLoggedIn();
-      _currentUser = _authService.currentUser;
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error fetching user data: $e');
-      }
-    }
-  }
-
-  // Password reset
+  // Reset password - sends password reset email
   Future<void> resetPassword(String email) async {
     try {
       _setLoading(true);
@@ -209,21 +152,27 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Update user profile
-  Future<void> updateProfile(UserModel user) async {
+  // Check auth status (useful for splash screen)
+  Future<void> checkAuthStatus() async {
     try {
-      _setLoading(true);
-      _clearError();
-
-      await _authService.updateProfile(user);
-      _currentUser = user;
-
-      _setLoading(false);
+      final isLoggedIn = _authService.isLoggedIn;
+      if (isLoggedIn) {
+        _currentUser = _authService.currentUser;
+        _isAuthenticated = true;
+      } else {
+        _currentUser = null;
+        _isAuthenticated = false;
+      }
+      notifyListeners();
     } catch (e) {
-      _setLoading(false);
-      _setError(e.toString());
+      if (kDebugMode) {
+        print('Auth status check error: $e');
+      }
+      _isAuthenticated = false;
+      notifyListeners();
     }
   }
+
 
   // Private helper methods
   void _setLoading(bool loading) {

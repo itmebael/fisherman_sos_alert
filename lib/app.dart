@@ -5,12 +5,12 @@ import 'constants/routes.dart';
 import 'providers/auth_provider.dart';
 
 class BantayDagatApp extends StatelessWidget {
-  const BantayDagatApp({Key? key}) : super(key: key);
+  const BantayDagatApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BantayDagat',
+      title: 'Salbar_Mangirisda',
       theme: ThemeData(
         primarySwatch: AppColors.primarySwatch,
         fontFamily: 'Roboto',

@@ -6,7 +6,7 @@ import '../../constants/routes.dart';
 import '../../providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   _SplashScreenState createState() => _SplashScreenState();
@@ -17,6 +17,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
@@ -43,33 +44,44 @@ class _SplashScreenState extends State<SplashScreen>
       curve: const Interval(0.2, 0.8, curve: Curves.elasticOut),
     ));
 
+    _pulseAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.2,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.6, 1.0, curve: Curves.easeInOut),
+    ));
+
     _controller.forward();
-    _navigateToHome();
   }
 
-  _navigateToHome() async {
-    await Future.delayed(const Duration(seconds: 3));
+  bool _isNavigating = false;
+
+  Future<void> _performNavigation() async {
+    if (_isNavigating) return;
+    
+    setState(() {
+      _isNavigating = true;
+    });
+
+    final authProvider = context.read<AuthProvider>();
+    await authProvider.checkAuthStatus();
     
     if (mounted) {
-      final authProvider = context.read<AuthProvider>();
-      await authProvider.checkAuthStatus();
-      
-      if (mounted) {
-        // Check if user is logged in
-        if (authProvider.isLoggedIn && authProvider.currentUser != null) {
-          // User is logged in, navigate based on user type
-          if (authProvider.currentUser!.userType == 'coastguard') {
-            Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);
-          } else if (authProvider.currentUser!.userType == 'fisherman') {
-            Navigator.pushReplacementNamed(context, AppRoutes.fishermanHome);
-          } else {
-            // Unknown user type, go to login
-            Navigator.pushReplacementNamed(context, AppRoutes.login);
-          }
+      // Check if user is logged in
+      if (authProvider.isLoggedIn && authProvider.currentUser != null) {
+        // User is logged in, navigate based on user type
+        if (authProvider.currentUser!.userType == 'coastguard') {
+          Navigator.pushReplacementNamed(context, AppRoutes.adminDashboard);
+        } else if (authProvider.currentUser!.userType == 'fisherman') {
+          Navigator.pushReplacementNamed(context, AppRoutes.fishermanHome);
         } else {
-          // User is not logged in, go to login screen
+          // Unknown user type, go to login
           Navigator.pushReplacementNamed(context, AppRoutes.login);
         }
+      } else {
+        // User is not logged in, go to login screen
+        Navigator.pushReplacementNamed(context, AppRoutes.login);
       }
     }
   }
@@ -83,27 +95,34 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.primaryColor,
-              AppColors.drawerColor,
-            ],
+      body: GestureDetector(
+        onTap: () {
+          if (!_isNavigating) {
+            _performNavigation();
+          }
+        },
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.primaryColor,
+                AppColors.drawerColor,
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, child) {
-              return MediaQuery.of(context).size.width < 600
-                  ? _buildMobileLayout()
-                  : _buildWebLayout();
-            },
+          child: SafeArea(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                return MediaQuery.of(context).size.width < 600
+                    ? _buildMobileLayout()
+                    : _buildWebLayout();
+              },
+            ),
           ),
         ),
       ),
@@ -181,14 +200,27 @@ class _SplashScreenState extends State<SplashScreen>
           
           const SizedBox(height: 40),
           
-          // Loading indicator
+          // Tap to continue message
           FadeTransition(
             opacity: _fadeAnimation,
-            child: const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(
-                AppColors.whiteColor,
+            child: ScaleTransition(
+              scale: _pulseAnimation,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(25),
+                  border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                ),
+                child: const Text(
+                  'Tap to continue',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.whiteColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-              strokeWidth: 3,
             ),
           ),
         ],
@@ -269,14 +301,27 @@ class _SplashScreenState extends State<SplashScreen>
             
             const SizedBox(height: 50),
             
-            // Loading indicator
+            // Tap to continue message
             FadeTransition(
               opacity: _fadeAnimation,
-              child: const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  AppColors.whiteColor,
+              child: ScaleTransition(
+                scale: _pulseAnimation,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+                  ),
+                  child: const Text(
+                    'Tap to continue',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppColors.whiteColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-                strokeWidth: 4,
               ),
             ),
           ],

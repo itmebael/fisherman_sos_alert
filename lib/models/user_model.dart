@@ -1,22 +1,32 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class UserModel {
-  final String id; // Firebase Auth UID, used as Firestore doc id
+  final String id; // UUID primary key
   final String? displayId; // Optional, for sequential/friendly IDs in UI
   final String? firstName;
   final String? middleName;
   final String? lastName;
-  final String name; // Optional: full name (for display)
-  final String email;
-  final String phone; // Used for fishermen, empty for admin
+  final String? name; // Optional: full name (for display)
+  final String? email;
+  final String? phone; // Used for fishermen, empty for admin
   final String userType;
-  final DateTime registrationDate;
-  final bool isActive;
+  final DateTime? registrationDate;
+  final bool? isActive;
   final String? address;
   final String? fishingArea;
   final String? emergencyContactPerson;
-  final String? boatId;
-  final DateTime? lastActive; // NEW: Track last activity
+  final DateTime? lastActive; // Track last activity
+  final String? profileImageUrl; // Profile image URL
+  final DateTime? createdAt; // Creation timestamp
+
+  // Getter for full name
+  String get fullName {
+    if (firstName != null && lastName != null) {
+      return '$firstName $lastName';
+    } else if (name != null && name!.isNotEmpty) {
+      return name!;
+    } else {
+      return 'Unknown User';
+    }
+  }
 
   UserModel({
     required this.id,
@@ -24,24 +34,68 @@ class UserModel {
     this.firstName,
     this.middleName,
     this.lastName,
-    required this.name,
-    required this.email,
-    required this.phone,
-    required this.userType,
-    required this.registrationDate,
-    required this.isActive,
+    this.name,
+    this.email,
+    this.phone,
+    this.userType = 'fisherman',
+    this.registrationDate,
+    this.isActive,
     this.address,
     this.fishingArea,
     this.emergencyContactPerson,
-    this.boatId,
-    this.lastActive, // NEW: Optional last activity
+    this.lastActive,
+    this.profileImageUrl,
+    this.createdAt,
   });
+
+  factory UserModel.fromMap(Map<String, dynamic> map) {
+    DateTime? regDate;
+    if (map['registration_date'] is String) {
+      regDate = DateTime.tryParse(map['registration_date']);
+    } else if (map['registration_date'] is DateTime) {
+      regDate = map['registration_date'];
+    }
+
+    // Parse lastActive
+    DateTime? lastActiveDate;
+    if (map['last_active'] is String) {
+      lastActiveDate = DateTime.tryParse(map['last_active']);
+    } else if (map['last_active'] is DateTime) {
+      lastActiveDate = map['last_active'];
+    }
+
+    // Parse createdAt
+    DateTime? createdDate;
+    if (map['created_at'] is String) {
+      createdDate = DateTime.tryParse(map['created_at']);
+    } else if (map['created_at'] is DateTime) {
+      createdDate = map['created_at'];
+    }
+
+    return UserModel(
+      id: map['id'] ?? '',
+      displayId: map['display_id'],
+      firstName: map['first_name'],
+      middleName: map['middle_name'],
+      lastName: map['last_name'],
+      name: map['name'],
+      email: map['email'],
+      phone: map['phone'],
+      userType: map['user_type'] ?? 'fisherman',
+      registrationDate: regDate,
+      isActive: map['is_active'],
+      address: map['address'],
+      fishingArea: map['fishing_area'],
+      emergencyContactPerson: map['emergency_contact_person'],
+      lastActive: lastActiveDate,
+      profileImageUrl: map['profile_image_url'] ?? map['profile_picture_url'],
+      createdAt: createdDate,
+    );
+  }
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     DateTime regDate;
-    if (json['registrationDate'] is Timestamp) {
-      regDate = (json['registrationDate'] as Timestamp).toDate();
-    } else if (json['registrationDate'] is String) {
+    if (json['registrationDate'] is String) {
       regDate = DateTime.tryParse(json['registrationDate']) ?? DateTime.now();
     } else if (json['registrationDate'] is DateTime) {
       regDate = json['registrationDate'];
@@ -51,9 +105,7 @@ class UserModel {
 
     // Parse lastActive
     DateTime? lastActiveDate;
-    if (json['lastActive'] is Timestamp) {
-      lastActiveDate = (json['lastActive'] as Timestamp).toDate();
-    } else if (json['lastActive'] is String) {
+    if (json['lastActive'] is String) {
       lastActiveDate = DateTime.tryParse(json['lastActive']);
     } else if (json['lastActive'] is DateTime) {
       lastActiveDate = json['lastActive'];
@@ -74,14 +126,15 @@ class UserModel {
       address: json['address'],
       fishingArea: json['fishingArea'],
       emergencyContactPerson: json['emergencyContactPerson'],
-      boatId: json['boatId'],
       lastActive: lastActiveDate, // NEW
+      profileImageUrl: json['profileImageUrl'], // NEW
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id, // Firebase UID
+      'id': id, // Supabase UID
       if (displayId != null) 'displayId': displayId,
       if (firstName != null) 'firstName': firstName,
       if (middleName != null) 'middleName': middleName,
@@ -90,13 +143,14 @@ class UserModel {
       'email': email,
       'phone': phone,
       'userType': userType,
-      'registrationDate': Timestamp.fromDate(registrationDate),
+      'registrationDate': registrationDate?.toIso8601String(),
       'isActive': isActive,
       'address': address,
       'fishingArea': fishingArea,
       'emergencyContactPerson': emergencyContactPerson,
-      'boatId': boatId,
-      if (lastActive != null) 'lastActive': Timestamp.fromDate(lastActive!), // NEW
+      if (lastActive != null) 'lastActive': lastActive!.toIso8601String(), // NEW
+      'profileImageUrl': profileImageUrl, // NEW
+      'createdAt': createdAt?.toIso8601String(),
     };
   }
 
@@ -117,6 +171,8 @@ class UserModel {
     String? emergencyContactPerson,
     String? boatId,
     DateTime? lastActive, // NEW
+    String? profileImageUrl, // NEW
+    DateTime? createdAt,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -133,8 +189,9 @@ class UserModel {
       address: address ?? this.address,
       fishingArea: fishingArea ?? this.fishingArea,
       emergencyContactPerson: emergencyContactPerson ?? this.emergencyContactPerson,
-      boatId: boatId ?? this.boatId,
       lastActive: lastActive ?? this.lastActive, // NEW
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl, // NEW
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
