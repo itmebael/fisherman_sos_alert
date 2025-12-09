@@ -102,7 +102,7 @@
 
   <script>
     // The value below is injected by flutter build, do not touch.
-    const serviceWorkerVersion = "824780815";
+    const serviceWorkerVersion = "2707276055";
     
     // Check if running from file:// protocol
     function isFileProtocol() {
@@ -138,13 +138,15 @@
         `;
       });
     } else {
-      // Show loading indicator
-      document.body.innerHTML = `
-        <div class="loading-container">
-          <div class="loading-spinner"></div>
-          <div class="loading-text">Loading BantayDagat...</div>
-        </div>
-      `;
+      // Show loading indicator immediately
+      if (document.body) {
+        document.body.innerHTML = `
+          <div class="loading-container">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading BantayDagat...</div>
+          </div>
+        `;
+      }
     }
   </script>
   
@@ -152,10 +154,14 @@
   <script src="flutter.js" defer></script>
 </head>
 <body>
+  <div class="loading-container">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Loading BantayDagat...</div>
+  </div>
   <script>
     if (!isFileProtocol()) {
       let initAttempts = 0;
-      const maxAttempts = 50; // 5 seconds max wait
+      const maxAttempts = 100; // 10 seconds max wait
       
       function initializeFlutter() {
         initAttempts++;
@@ -168,77 +174,102 @@
             return;
           } else {
             // Timeout - flutter.js didn't load
-            console.error('Flutter loader timeout - flutter.js did not load');
-            document.body.innerHTML = `
-              <div class="error-message show">
-                <div class="error-title">❌ Loading Error</div>
-                <div class="error-text">
-                  Failed to load Flutter runtime.<br>
-                  Please check your internet connection and try again.
+            console.error('Flutter loader timeout - flutter.js did not load after', initAttempts * 100, 'ms');
+            const loadingContainer = document.querySelector('.loading-container');
+            if (loadingContainer) {
+              loadingContainer.innerHTML = `
+                <div class="error-message show">
+                  <div class="error-title">❌ Loading Error</div>
+                  <div class="error-text">
+                    Failed to load Flutter runtime.<br>
+                    Please check your internet connection and try again.<br>
+                    <br>
+                    <strong>Debug Info:</strong><br>
+                    Attempts: ${initAttempts}<br>
+                    Flutter defined: ${typeof _flutter !== 'undefined'}<br>
+                    Loader available: ${typeof _flutter !== 'undefined' && _flutter.loader ? 'Yes' : 'No'}
+                  </div>
+                  <div class="error-code">Timeout waiting for flutter.js</div>
                 </div>
-                <div class="error-code">Timeout waiting for flutter.js</div>
-              </div>
-            `;
+              `;
+            }
             return;
           }
         }
 
         // Flutter loader is available, initialize
         try {
+          console.log('Initializing Flutter app...');
           _flutter.loader.loadEntrypoint({
             serviceWorker: {
               serviceWorkerVersion: serviceWorkerVersion,
             },
             onEntrypointLoaded: function(engineInitializer) {
+              console.log('Flutter entrypoint loaded, initializing engine...');
               engineInitializer.initializeEngine().then(function(appRunner) {
+                console.log('Flutter engine initialized, running app...');
                 appRunner.runApp();
               }).catch(function(error) {
                 console.error('Error initializing Flutter app:', error);
-                document.body.innerHTML = `
+                const loadingContainer = document.querySelector('.loading-container');
+                if (loadingContainer) {
+                  loadingContainer.innerHTML = `
+                    <div class="error-message show">
+                      <div class="error-title">❌ Application Error</div>
+                      <div class="error-text">
+                        Failed to initialize the application.<br>
+                        Please check the browser console (F12) for details.
+                      </div>
+                      <div class="error-code">${error.toString()}</div>
+                    </div>
+                  `;
+                }
+              });
+            },
+            onError: function(error) {
+              console.error('Flutter loader error:', error);
+              const loadingContainer = document.querySelector('.loading-container');
+              if (loadingContainer) {
+                loadingContainer.innerHTML = `
                   <div class="error-message show">
-                    <div class="error-title">❌ Application Error</div>
+                    <div class="error-title">❌ Loading Error</div>
                     <div class="error-text">
-                      Failed to initialize the application.<br>
+                      Failed to load the application files.<br>
                       Please check the browser console (F12) for details.
                     </div>
                     <div class="error-code">${error.toString()}</div>
                   </div>
                 `;
-              });
-            },
-            onError: function(error) {
-              console.error('Flutter loader error:', error);
-              document.body.innerHTML = `
-                <div class="error-message show">
-                  <div class="error-title">❌ Loading Error</div>
-                  <div class="error-text">
-                    Failed to load the application files.<br>
-                    Please check the browser console (F12) for details.
-                  </div>
-                  <div class="error-code">${error.toString()}</div>
-                </div>
-              `;
+              }
             }
           });
         } catch (error) {
           console.error('Error setting up Flutter loader:', error);
-          document.body.innerHTML = `
-            <div class="error-message show">
-              <div class="error-title">❌ Setup Error</div>
-              <div class="error-text">
-                Failed to set up Flutter loader.<br>
-                Please check the browser console (F12) for details.
+          const loadingContainer = document.querySelector('.loading-container');
+          if (loadingContainer) {
+            loadingContainer.innerHTML = `
+              <div class="error-message show">
+                <div class="error-title">❌ Setup Error</div>
+                <div class="error-text">
+                  Failed to set up Flutter loader.<br>
+                  Please check the browser console (F12) for details.
+                </div>
+                <div class="error-code">${error.toString()}</div>
               </div>
-              <div class="error-code">${error.toString()}</div>
-            </div>
-          `;
+            `;
+          }
         }
       }
 
       // Start initialization when page loads
-      window.addEventListener('load', function(ev) {
+      if (document.readyState === 'loading') {
+        window.addEventListener('load', function(ev) {
+          initializeFlutter();
+        });
+      } else {
+        // DOM already loaded
         initializeFlutter();
-      });
+      }
     }
   </script>
   
