@@ -1,21 +1,24 @@
-# Ignore everything except build/web
-*
-!build/
-build/*
-!build/web/
-
-# Keep essential files
-!.gitignore
-!vercel.json
-!README.md
-!web/
-web/*
-!web/index.html
-!web/manifest.json
-
-# Explicitly ignore these
+# Only ignore specific things, NOT build/web
+.git/
+.gitignore
+node_modules/
 package.json
 package-lock.json
 yarn.lock
-node_modules/
-.git/
+*.log
+.DS_Store
+.vscode/
+.idea/
+android/
+ios/
+linux/
+macos/
+windows/
+test/
+*.dart
+!web/*.html
+!web/*.json
+pubspec.lock
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
