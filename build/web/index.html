@@ -102,7 +102,7 @@
 
   <script>
     // The value below is injected by flutter build, do not touch.
-    const serviceWorkerVersion = "1936351925";
+    const serviceWorkerVersion = "773724195";
     
     // Check if running from file:// protocol
     function isFileProtocol() {
@@ -154,90 +154,18 @@
 <body>
   <script>
     if (!isFileProtocol()) {
-      let initAttempts = 0;
-      const maxAttempts = 50; // 5 seconds max wait
-      
-      function initializeFlutter() {
-        initAttempts++;
-        
-        // Check if flutter.js has loaded
-        if (typeof _flutter === 'undefined' || !_flutter.loader) {
-          if (initAttempts < maxAttempts) {
-            // Retry after 100ms
-            setTimeout(initializeFlutter, 100);
-            return;
-          } else {
-            // Timeout - flutter.js didn't load
-            console.error('Flutter loader timeout - flutter.js did not load');
-            document.body.innerHTML = `
-              <div class="error-message show">
-                <div class="error-title">❌ Loading Error</div>
-                <div class="error-text">
-                  Failed to load Flutter runtime.<br>
-                  Please check your internet connection and try again.
-                </div>
-                <div class="error-code">Timeout waiting for flutter.js</div>
-              </div>
-            `;
-            return;
-          }
-        }
-
-        // Flutter loader is available, initialize
-        try {
-          _flutter.loader.loadEntrypoint({
-            serviceWorker: {
-              serviceWorkerVersion: serviceWorkerVersion,
-            },
-            onEntrypointLoaded: function(engineInitializer) {
-              engineInitializer.initializeEngine().then(function(appRunner) {
-                appRunner.runApp();
-              }).catch(function(error) {
-                console.error('Error initializing Flutter app:', error);
-                document.body.innerHTML = `
-                  <div class="error-message show">
-                    <div class="error-title">❌ Application Error</div>
-                    <div class="error-text">
-                      Failed to initialize the application.<br>
-                      Please check the browser console (F12) for details.
-                    </div>
-                    <div class="error-code">${error.toString()}</div>
-                  </div>
-                `;
-              });
-            },
-            onError: function(error) {
-              console.error('Flutter loader error:', error);
-              document.body.innerHTML = `
-                <div class="error-message show">
-                  <div class="error-title">❌ Loading Error</div>
-                  <div class="error-text">
-                    Failed to load the application files.<br>
-                    Please check the browser console (F12) for details.
-                  </div>
-                  <div class="error-code">${error.toString()}</div>
-                </div>
-              `;
-            }
-          });
-        } catch (error) {
-          console.error('Error setting up Flutter loader:', error);
-          document.body.innerHTML = `
-            <div class="error-message show">
-              <div class="error-title">❌ Setup Error</div>
-              <div class="error-text">
-                Failed to set up Flutter loader.<br>
-                Please check the browser console (F12) for details.
-              </div>
-              <div class="error-code">${error.toString()}</div>
-            </div>
-          `;
-        }
-      }
-
-      // Start initialization when page loads
       window.addEventListener('load', function(ev) {
-        initializeFlutter();
+        // Wait for flutter.js to load
+        _flutter.loader.loadEntrypoint({
+          serviceWorker: {
+            serviceWorkerVersion: serviceWorkerVersion,
+          },
+          onEntrypointLoaded: function(engineInitializer) {
+            engineInitializer.initializeEngine().then(function(appRunner) {
+              appRunner.runApp();
+            });
+          },
+        });
       });
     }
   </script>
