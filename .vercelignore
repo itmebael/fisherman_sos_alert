@@ -1,12 +1,5 @@
-# Ignore everything except build/web
+# Ignore everything except build/web for deployment
 *
-!build/
-build/*
-!build/web/
-build/web/*
-
-# But keep these files
-!.gitignore
+!build/web
+!build/web/**
 !vercel.json
-!package.json
-!README.md
