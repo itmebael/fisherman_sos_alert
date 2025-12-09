@@ -1,10 +1,22 @@
 {
   "version": 2,
+  "buildCommand": "",
   "outputDirectory": "build/web",
   "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/main.dart.js",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/javascript"
+        }
+      ]
     }
   ]
 }
