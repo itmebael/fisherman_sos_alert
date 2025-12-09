@@ -20,8 +20,8 @@
   <title>BantayDagat</title>
   <link rel="manifest" href="manifest.json">
 
-  <!-- Google Maps JavaScript API -->
-  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=geometry"></script>
+  <!-- Google Maps JavaScript API - Commented out until API key is configured -->
+  <!-- <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=geometry"></script> -->
 
   <style>
     body {
@@ -149,49 +149,84 @@
   </script>
   
   <!-- This script adds the flutter initialization JS code -->
-  <script src="flutter.js" defer></script>
+  <script src="flutter.js"></script>
 </head>
 <body>
   <script>
     if (!isFileProtocol()) {
-      window.addEventListener('load', function(ev) {
-        // Download main.dart.js
-        _flutter.loader.loadEntrypoint({
-          serviceWorker: {
-            serviceWorkerVersion: serviceWorkerVersion,
-          },
-          onEntrypointLoaded: function(engineInitializer) {
-            engineInitializer.initializeEngine().then(function(appRunner) {
-              appRunner.runApp();
-            }).catch(function(error) {
-              console.error('Error initializing Flutter app:', error);
-              document.body.innerHTML = `
-                <div class="error-message show">
-                  <div class="error-title">❌ Application Error</div>
-                  <div class="error-text">
-                    Failed to initialize the application.<br>
-                    Please check the browser console for details.
-                  </div>
-                  <div class="error-code">${error.toString()}</div>
-                </div>
-              `;
+      // Wait for flutter.js to load before initializing
+      function initializeFlutter() {
+        if (typeof _flutter === 'undefined' || !_flutter.loader) {
+          console.error('Flutter loader not found. Retrying...');
+          setTimeout(initializeFlutter, 100);
+          return;
+        }
+
+        // Use the loader API (works with both old and new versions)
+        try {
+          if (_flutter.loader.load) {
+            // New API
+            _flutter.loader.load({
+              serviceWorkerSettings: {
+                serviceWorkerVersion: serviceWorkerVersion,
+              },
+              onEntrypointLoaded: function(engineInitializer) {
+                engineInitializer.initializeEngine().then(function(appRunner) {
+                  appRunner.runApp();
+                }).catch(function(error) {
+                  console.error('Error initializing Flutter app:', error);
+                  showError('Application Error', 'Failed to initialize the application.', error);
+                });
+              },
+              onError: function(error) {
+                console.error('Flutter loader error:', error);
+                showError('Loading Error', 'Failed to load the application files.', error);
+              }
             });
-          },
-          onError: function(error) {
-            console.error('Flutter loader error:', error);
-            document.body.innerHTML = `
-              <div class="error-message show">
-                <div class="error-title">❌ Loading Error</div>
-                <div class="error-text">
-                  Failed to load the application files.<br>
-                  Please check the browser console for details.
-                </div>
-                <div class="error-code">${error.toString()}</div>
-              </div>
-            `;
+          } else if (_flutter.loader.loadEntrypoint) {
+            // Old API (deprecated but still works)
+            _flutter.loader.loadEntrypoint({
+              serviceWorker: {
+                serviceWorkerVersion: serviceWorkerVersion,
+              },
+              onEntrypointLoaded: function(engineInitializer) {
+                engineInitializer.initializeEngine().then(function(appRunner) {
+                  appRunner.runApp();
+                }).catch(function(error) {
+                  console.error('Error initializing Flutter app:', error);
+                  showError('Application Error', 'Failed to initialize the application.', error);
+                });
+              },
+              onError: function(error) {
+                console.error('Flutter loader error:', error);
+                showError('Loading Error', 'Failed to load the application files.', error);
+              }
+            });
+          } else {
+            throw new Error('Flutter loader API not found');
           }
-        });
-      });
+        } catch (error) {
+          console.error('Error setting up Flutter loader:', error);
+          showError('Setup Error', 'Failed to set up Flutter loader.', error);
+        }
+      }
+
+      function showError(title, message, error) {
+        document.body.innerHTML = `
+          <div class="error-message show">
+            <div class="error-title">❌ ${title}</div>
+            <div class="error-text">${message}<br>Please check the browser console for details.</div>
+            <div class="error-code">${error ? error.toString() : 'Unknown error'}</div>
+          </div>
+        `;
+      }
+
+      // Start initialization when page loads
+      if (document.readyState === 'loading') {
+        window.addEventListener('load', initializeFlutter);
+      } else {
+        initializeFlutter();
+      }
     }
   </script>
   
