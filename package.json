@@ -1,9 +1,5 @@
 {
   "name": "fisherman-sos-alert",
   "version": "1.0.0",
-  "description": "BantayDagat - Mobile Rescue And Location Tracking System",
-  "scripts": {},
-  "engines": {
-    "node": ">=18.x"
-  }
+  "description": "BantayDagat - Mobile Rescue And Location Tracking System"
 }
