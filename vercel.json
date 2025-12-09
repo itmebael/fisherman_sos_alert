@@ -1,8 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "",
   "outputDirectory": "build/web",
-  "framework": null,
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
@@ -58,4 +56,3 @@
     }
   ]
 }
-
