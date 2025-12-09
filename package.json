@@ -1,0 +1,12 @@
+{
+  "name": "fisherman-sos-alert",
+  "version": "1.0.0",
+  "description": "BantayDagat - Mobile Rescue And Location Tracking System",
+  "scripts": {
+    "build": "echo 'Using pre-built Flutter web files'",
+    "vercel-build": "echo 'Using pre-built Flutter web files'"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
