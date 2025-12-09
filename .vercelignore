@@ -8,5 +8,14 @@ build/web/*
 # But keep these files
 !.gitignore
 !vercel.json
-!package.json
 !README.md
+!web/
+web/*
+!web/index.html
+!web/manifest.json
+
+# Explicitly ignore package.json if it exists
+package.json
+package-lock.json
+yarn.lock
+node_modules/
