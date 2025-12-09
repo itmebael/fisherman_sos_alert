@@ -156,6 +156,20 @@
     if (!isFileProtocol()) {
       window.addEventListener('load', function(ev) {
         // Wait for flutter.js to load
+        if (typeof _flutter === 'undefined' || !_flutter.loader) {
+          console.error('Flutter loader not available');
+          document.body.innerHTML = `
+            <div class="error-message show">
+              <div class="error-title">❌ Loading Error</div>
+              <div class="error-text">
+                Failed to load Flutter runtime.<br>
+                Please check the browser console (F12) for details.
+              </div>
+            </div>
+          `;
+          return;
+        }
+        
         _flutter.loader.loadEntrypoint({
           serviceWorker: {
             serviceWorkerVersion: serviceWorkerVersion,
@@ -163,8 +177,33 @@
           onEntrypointLoaded: function(engineInitializer) {
             engineInitializer.initializeEngine().then(function(appRunner) {
               appRunner.runApp();
+            }).catch(function(error) {
+              console.error('Error initializing Flutter app:', error);
+              document.body.innerHTML = `
+                <div class="error-message show">
+                  <div class="error-title">❌ Application Error</div>
+                  <div class="error-text">
+                    Failed to initialize the application.<br>
+                    Error: ${error.toString()}<br>
+                    Please check the browser console (F12) for details.
+                  </div>
+                </div>
+              `;
             });
           },
+          onError: function(error) {
+            console.error('Flutter loader error:', error);
+            document.body.innerHTML = `
+              <div class="error-message show">
+                <div class="error-title">❌ Loading Error</div>
+                <div class="error-text">
+                  Failed to load the application files.<br>
+                  Error: ${error.toString()}<br>
+                  Please check the browser console (F12) for details.
+                </div>
+              </div>
+            `;
+          }
         });
       });
     }
