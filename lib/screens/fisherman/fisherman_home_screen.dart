@@ -86,36 +86,20 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
       orElse: () => <String, dynamic>{},
     );
 
-    if (coastguardWithPhone.isEmpty) {
-      // No phone number available, show message
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.phone, color: Colors.green),
-              SizedBox(width: 8),
-              Text('Call Coast Guard'),
-            ],
-          ),
-          content: const Text(
-            'No emergency contact number is available at the moment. Please use the SOS button for emergency alerts.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
-      );
-      return;
+    // Use coastguard phone if available, otherwise use default emergency number
+    final String phoneNumber;
+    final String contactName;
+    
+    if (coastguardWithPhone.isNotEmpty) {
+      phoneNumber = coastguardWithPhone['phone'].toString();
+      contactName = coastguardWithPhone['name'] ?? 
+                   coastguardWithPhone['first_name'] ?? 
+                   'Coast Guard';
+    } else {
+      // Use default emergency call number
+      phoneNumber = AppStrings.emergencyCallNumber;
+      contactName = AppStrings.emergencyContactName;
     }
-
-    final phoneNumber = coastguardWithPhone['phone'].toString();
-    final coastguardName = coastguardWithPhone['name'] ?? 
-                           coastguardWithPhone['first_name'] ?? 
-                           'Coast Guard';
 
     showDialog(
       context: context,
@@ -131,7 +115,7 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Contact: $coastguardName'),
+            Text('Contact: $contactName'),
             const SizedBox(height: 8),
             Text('Phone: $phoneNumber'),
             const SizedBox(height: 16),
@@ -299,6 +283,50 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
                         style: TextStyle(
                           fontSize: 14,
                           color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: screenHeight * 0.02),
+                      // Emergency Contact Number Display
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.blue.shade200,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.phone,
+                              color: Colors.blue,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Emergency: ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () => _makePhoneCall(AppStrings.emergencyCallNumber),
+                              child: Text(
+                                AppStrings.emergencyCallNumber,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       SizedBox(height: screenHeight * 0.05),

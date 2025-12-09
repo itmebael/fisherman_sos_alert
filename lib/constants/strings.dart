@@ -12,4 +12,8 @@ class AppStrings {
   static const String userMenu = 'User MENU';
   static const String fishermanHome = 'Fisherman Home';
   static const String adminDashboard = 'Admin Dashboard';
+  
+  // Emergency Contact Number for Fishermen
+  static const String emergencyCallNumber = '09393898330';
+  static const String emergencyContactName = 'Coast Guard Emergency';
 }
