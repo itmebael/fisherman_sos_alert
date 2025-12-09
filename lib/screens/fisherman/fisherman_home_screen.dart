@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
 import '../../constants/strings.dart';
 import 'sos_button.dart';
-import '../../services/database_service.dart';
 import '../../services/global_notification_manager.dart';
 import '../../providers/auth_provider.dart';
 import 'fisherman_drawer.dart';
@@ -17,15 +16,11 @@ class FishermanHomeScreen extends StatefulWidget {
 }
 
 class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
-  final DatabaseService _databaseService = DatabaseService();
   final GlobalNotificationManager _globalNotificationManager = GlobalNotificationManager();
-  List<Map<String, dynamic>> _coastguards = [];
-  bool _isLoadingCoastguards = false;
 
   @override
   void initState() {
     super.initState();
-    _loadCoastguards();
     // Initialize global notification manager
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -37,24 +32,6 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
   void dispose() {
     _globalNotificationManager.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadCoastguards() async {
-    setState(() {
-      _isLoadingCoastguards = true;
-    });
-    try {
-      final coastguards = await _databaseService.getActiveCoastguards();
-      setState(() {
-        _coastguards = coastguards;
-        _isLoadingCoastguards = false;
-      });
-    } catch (e) {
-      print('Error loading coastguards: $e');
-      setState(() {
-        _isLoadingCoastguards = false;
-      });
-    }
   }
 
   Future<void> _makePhoneCall(String phoneNumber) async {
@@ -80,26 +57,9 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
   }
 
   void _showCallDialog() {
-    // Find first coastguard with a phone number
-    final coastguardWithPhone = _coastguards.firstWhere(
-      (cg) => cg['phone'] != null && cg['phone'].toString().isNotEmpty,
-      orElse: () => <String, dynamic>{},
-    );
-
-    // Use coastguard phone if available, otherwise use default emergency number
-    final String phoneNumber;
-    final String contactName;
-    
-    if (coastguardWithPhone.isNotEmpty) {
-      phoneNumber = coastguardWithPhone['phone'].toString();
-      contactName = coastguardWithPhone['name'] ?? 
-                   coastguardWithPhone['first_name'] ?? 
-                   'Coast Guard';
-    } else {
-      // Use default emergency call number
-      phoneNumber = AppStrings.emergencyCallNumber;
-      contactName = AppStrings.emergencyContactName;
-    }
+    // Always use the emergency call number 09393898330
+    final String phoneNumber = AppStrings.emergencyCallNumber;
+    final String contactName = AppStrings.emergencyContactName;
 
     showDialog(
       context: context,
@@ -242,22 +202,11 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: _isLoadingCoastguards ? null : _showCallDialog,
-                          icon: _isLoadingCoastguards
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : const Icon(Icons.phone, size: 24),
-                          label: Text(
-                            _isLoadingCoastguards
-                                ? 'Loading...'
-                                : 'Call Coast Guard',
-                            style: const TextStyle(
+                          onPressed: _showCallDialog,
+                          icon: const Icon(Icons.phone, size: 24),
+                          label: const Text(
+                            'Call Coast Guard',
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
