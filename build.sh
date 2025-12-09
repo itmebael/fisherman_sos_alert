@@ -40,3 +40,4 @@ flutter build web --release --web-renderer canvaskit
 echo "✅ Build completed successfully!"
 echo "📁 Output directory: build/web"
 
+

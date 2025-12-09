@@ -64,3 +64,4 @@ If you still get 404:
 2. Verify `build/web/index.html` exists in your repository
 3. Check Vercel project settings - Output Directory should be `build/web`
 
+
