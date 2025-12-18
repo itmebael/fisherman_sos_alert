@@ -156,7 +156,6 @@ class _AdminDrawerState extends State<AdminDrawer> with TickerProviderStateMixin
                         _buildModernItem(context, Icons.devices_other, 'Device Management', AppRoutes.deviceManagement),
                         _buildModernItem(context, Icons.emergency_rounded, 'Rescue Notifications', AppRoutes.rescueNotifications),
                         _buildModernItem(context, Icons.map_rounded, 'Maritime Map', AppRoutes.adminMap),
-                        _buildModernItem(context, Icons.cloud_rounded, 'Weather Report Map', AppRoutes.weatherReportMap),
                         _buildModernItem(context, Icons.analytics_rounded, 'Reports & Analytics', AppRoutes.reports),
                       ],
                     ),

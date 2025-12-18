@@ -147,29 +147,6 @@ class _FishermanNewsScreenState extends State<FishermanNewsScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
-                // Weather Alerts (if any)
-                if (_alerts.isNotEmpty)
-                  WeatherAlertsWidget(alerts: _alerts),
-                
-                // Current Weather
-                if (_isLoadingWeather)
-                  _buildLoadingWidget()
-                else if (_currentWeather != null)
-                  CoolWeatherWidget(
-                    weather: _currentWeather!,
-                    onTap: () {
-                      // Show detailed weather info
-                      _showWeatherDetails();
-                    },
-                  ),
-                
-                // Weather Forecast
-                if (_forecast.isNotEmpty)
-                  WeatherForecastWidget(
-                    forecast: _forecast,
-                    city: _selectedCity,
-                  ),
-                
                 // News Section Header
                 Container(
                   margin: const EdgeInsets.all(16),

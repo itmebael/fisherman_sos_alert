@@ -34,7 +34,7 @@ class NavigationPage extends StatelessWidget {
             const SizedBox(width: 16),
             // App title
             Text(
-              "Salbar_Mangirisda",
+              "Salbar Mangirisda",
               style: const TextStyle(
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,

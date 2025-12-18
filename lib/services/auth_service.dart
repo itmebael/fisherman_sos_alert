@@ -4,9 +4,11 @@ import 'dart:io';
 import '../models/user_model.dart';
 import '../data/local/shared_preferences_helper.dart';
 import '../supabase_config.dart';
+import 'connection_service.dart';
 
 class AuthService {
   final SupabaseClient _supabase = SupabaseConfig.client;
+  final ConnectionService _connectionService = ConnectionService();
   UserModel? _currentUser;
 
   // Hardcoded admin credentials
@@ -23,10 +25,20 @@ class AuthService {
 
   // Initialize auth service
   Future<void> initialize() async {
-    // Check if user is already logged in
+    // First, try to restore from Supabase session (for regular users)
     final session = _supabase.auth.currentSession;
     if (session != null) {
       await _fetchUserData(session.user.id);
+      return;
+    }
+    
+    // If no Supabase session, check SharedPreferences (for hardcoded admin or saved sessions)
+    final savedUser = await SharedPreferencesHelper.getUserData();
+    final isLoggedIn = await SharedPreferencesHelper.isUserLoggedIn();
+    
+    if (savedUser != null && isLoggedIn) {
+      _currentUser = savedUser;
+      print('Restored user session from SharedPreferences: ${savedUser.email}');
     }
   }
 
@@ -98,6 +110,46 @@ class AuthService {
     }
   }
 
+  // Helper function to check if account exists (by ID or email)
+  Future<bool> _checkAccountExists(String userId, String email, String userType) async {
+    try {
+      // First try by ID (faster)
+      final userById = await _connectionService.executeWithRetry(
+        () async {
+          if (userType == 'fisherman') {
+            return await _supabase.from('fishermen').select('id').eq('id', userId).maybeSingle();
+          } else {
+            return await _supabase.from('coastguards').select('id').eq('id', userId).maybeSingle();
+          }
+        },
+        maxRetries: 2,
+        timeout: const Duration(seconds: 10),
+      );
+      
+      if (userById != null) {
+        return true;
+      }
+      
+      // Also check by email (in case ID check fails but account exists)
+      final userByEmail = await _connectionService.executeWithRetry(
+        () async {
+          if (userType == 'fisherman') {
+            return await _supabase.from('fishermen').select('id').eq('email', email).maybeSingle();
+          } else {
+            return await _supabase.from('coastguards').select('id').eq('email', email).maybeSingle();
+          }
+        },
+        maxRetries: 2,
+        timeout: const Duration(seconds: 10),
+      );
+      
+      return userByEmail != null;
+    } catch (e) {
+      print('Error checking account existence: $e');
+      return false;
+    }
+  }
+
   // Register new user
   Future<bool> register({
     required String email,
@@ -111,17 +163,32 @@ class AuthService {
     String? fishingArea,
     String? emergencyContactPerson,
   }) async {
+    String? userId;
+    
     try {
-      // Create user in Supabase Auth
-      final response = await _supabase.auth.signUp(
-        email: email.trim(),
-        password: password,
+      // Create user in Supabase Auth with timeout and retry
+      final response = await _connectionService.executeWithRetry(
+        () async {
+          return await _supabase.auth.signUp(
+            email: email.trim(),
+            password: password,
+          ).timeout(
+            const Duration(seconds: 20),
+            onTimeout: () {
+              throw TimeoutException('Registration timeout. Please check your internet connection and try again.');
+            },
+          );
+        },
+        maxRetries: 3,
+        timeout: const Duration(seconds: 25),
       );
 
       if (response.user != null) {
+        userId = response.user!.id;
+        
         // Create user profile in database
         final userData = {
-          'id': response.user!.id,
+          'id': userId,
           'email': email.trim(),
           'first_name': firstName,
           'last_name': lastName,
@@ -136,21 +203,218 @@ class AuthService {
           if (emergencyContactPerson != null) 'emergency_contact_person': emergencyContactPerson,
         };
 
-        // Insert into appropriate table based on user type
-        if (userType == 'fisherman') {
-          await _supabase.from('fishermen').insert(userData);
-        } else if (userType == 'coastguard') {
-          await _supabase.from('coastguards').insert(userData);
+        // Insert into appropriate table with retry logic
+        bool insertSucceeded = false;
+        try {
+          await _connectionService.executeWithRetry(
+            () async {
+              if (userType == 'fisherman') {
+                await _supabase.from('fishermen').insert(userData).timeout(
+                  const Duration(seconds: 15),
+                  onTimeout: () {
+                    throw TimeoutException('Database insert timeout. Please try again.');
+                  },
+                );
+              } else if (userType == 'coastguard') {
+                await _supabase.from('coastguards').insert(userData).timeout(
+                  const Duration(seconds: 15),
+                  onTimeout: () {
+                    throw TimeoutException('Database insert timeout. Please try again.');
+                  },
+                );
+              }
+            },
+            maxRetries: 3,
+            timeout: const Duration(seconds: 20),
+          );
+          insertSucceeded = true;
+        } catch (insertError) {
+          // If insert fails, ALWAYS check if account was actually created
+          // (insert might succeed but response might fail due to network)
+          print('Insert error occurred, checking if account exists: $insertError');
+          
+          if (userId != null) {
+            final accountExists = await _checkAccountExists(userId, email.trim(), userType);
+            if (accountExists) {
+              print('Account exists despite insert error - registration succeeded');
+              return true;
+            }
+          }
+          
+          // If account doesn't exist, check if email is already registered
+          try {
+            final existingByEmail = await _connectionService.executeWithRetry(
+              () async {
+                if (userType == 'fisherman') {
+                  return await _supabase.from('fishermen').select('id').eq('email', email.trim()).maybeSingle();
+                } else {
+                  return await _supabase.from('coastguards').select('id').eq('email', email.trim()).maybeSingle();
+                }
+              },
+              maxRetries: 2,
+              timeout: const Duration(seconds: 10),
+            );
+            
+            if (existingByEmail != null) {
+              throw 'An account with this email already exists. Please sign in instead.';
+            }
+          } catch (emailCheckError) {
+            // If it's already the "already exists" message, re-throw it
+            if (emailCheckError.toString().contains('already exists')) {
+              throw emailCheckError;
+            }
+            // Otherwise, continue to throw original insert error
+          }
+          
+          // Re-throw original error if account doesn't exist
+          throw insertError;
+        }
+
+        // Verify account was created successfully (even if insert seemed to succeed)
+        if (userId != null && insertSucceeded) {
+          try {
+            final accountExists = await _checkAccountExists(userId, email.trim(), userType);
+            if (accountExists) {
+              return true;
+            }
+          } catch (e) {
+            // If verification fails but insert succeeded, assume success
+            // The account was inserted, verification is just a safety check
+            print('Verification check failed but insert succeeded - assuming success: $e');
+            return true;
+          }
         }
 
         return true;
       }
 
       return false;
+    } on TimeoutException {
+      // ALWAYS check if account was created despite timeout
+      if (userId != null) {
+        try {
+          final accountExists = await _checkAccountExists(userId, email.trim(), userType);
+          if (accountExists) {
+            return true; // Account exists, treat as success
+          }
+          
+          // Also check by email
+          final existingByEmail = await _connectionService.executeWithRetry(
+            () async {
+              if (userType == 'fisherman') {
+                return await _supabase.from('fishermen').select('id').eq('email', email.trim()).maybeSingle();
+              } else {
+                return await _supabase.from('coastguards').select('id').eq('email', email.trim()).maybeSingle();
+              }
+            },
+            maxRetries: 2,
+            timeout: const Duration(seconds: 10),
+          );
+          
+          if (existingByEmail != null) {
+            throw 'An account with this email already exists. Please sign in instead.';
+          }
+        } catch (e) {
+          // If it's the "already exists" message, re-throw it
+          if (e.toString().contains('already exists')) {
+            rethrow;
+          }
+          // Otherwise, continue with timeout error
+        }
+      }
+      throw 'Connection timeout. Please check your internet connection and try again.';
+    } on SocketException catch (e) {
+      // ALWAYS check if account was created despite network error
+      if (userId != null) {
+        try {
+          final accountExists = await _checkAccountExists(userId, email.trim(), userType);
+          if (accountExists) {
+            return true; // Account exists, treat as success
+          }
+          
+          // Also check by email
+          final existingByEmail = await _connectionService.executeWithRetry(
+            () async {
+              if (userType == 'fisherman') {
+                return await _supabase.from('fishermen').select('id').eq('email', email.trim()).maybeSingle();
+              } else {
+                return await _supabase.from('coastguards').select('id').eq('email', email.trim()).maybeSingle();
+              }
+            },
+            maxRetries: 2,
+            timeout: const Duration(seconds: 10),
+          );
+          
+          if (existingByEmail != null) {
+            throw 'An account with this email already exists. Please sign in instead.';
+          }
+        } catch (checkError) {
+          // If it's the "already exists" message, re-throw it
+          if (checkError.toString().contains('already exists')) {
+            rethrow;
+          }
+          // Otherwise, continue with network error
+        }
+      }
+      throw 'Network error. Please check your internet connection: ${e.message}';
     } on AuthException catch (e) {
+      // Check if account was created despite auth exception
+      if (userId != null) {
+        try {
+          final accountExists = await _checkAccountExists(userId, email.trim(), userType);
+          if (accountExists) {
+            return true; // Account exists, treat as success
+          }
+        } catch (checkError) {
+          // Ignore check errors
+        }
+      }
       throw _getAuthErrorMessage(e.message);
     } catch (e) {
-      throw 'Registration failed. Please check your connection.';
+      // ALWAYS check if account was created despite any exception
+      if (userId != null) {
+        try {
+          final accountExists = await _checkAccountExists(userId, email.trim(), userType);
+          if (accountExists) {
+            return true; // Account exists, treat as success
+          }
+          
+          // Also check by email to catch "already exists" cases
+          final existingByEmail = await _connectionService.executeWithRetry(
+            () async {
+              if (userType == 'fisherman') {
+                return await _supabase.from('fishermen').select('id').eq('email', email.trim()).maybeSingle();
+              } else {
+                return await _supabase.from('coastguards').select('id').eq('email', email.trim()).maybeSingle();
+              }
+            },
+            maxRetries: 2,
+            timeout: const Duration(seconds: 10),
+          );
+          
+          if (existingByEmail != null) {
+            throw 'An account with this email already exists. Please sign in instead.';
+          }
+        } catch (checkError) {
+          // If it's the "already exists" message, re-throw it
+          if (checkError.toString().contains('already exists')) {
+            rethrow;
+          }
+          // Otherwise, continue with original error
+        }
+      }
+      
+      // Provide more specific error messages
+      final errorMessage = e.toString().toLowerCase();
+      if (errorMessage.contains('timeout') || errorMessage.contains('connection')) {
+        throw 'Connection timeout. Please check your internet connection and try again.';
+      } else if (errorMessage.contains('socket') || errorMessage.contains('network')) {
+        throw 'Network error. Please check your internet connection and try again.';
+      } else if (errorMessage.contains('already exists') || errorMessage.contains('duplicate')) {
+        throw 'An account with this email already exists. Please sign in instead.';
+      } else {
+        throw 'Registration failed: ${e.toString()}. Please check your connection and try again.';
+      }
     }
   }
 
@@ -160,6 +424,7 @@ class AuthService {
     required String password,
     required String firstName,
     required String lastName,
+    String? middleName,
     required String phone,
     required String boatName,
     required String boatType,
@@ -170,57 +435,269 @@ class AuthService {
     String? fishingArea,
     String? emergencyContactPerson,
   }) async {
+    String? userId;
+    String? boatId;
+    
     try {
-      // Create fisherman account
-      final response = await _supabase.auth.signUp(
-        email: email.trim(),
-        password: password,
+      // Create fisherman account with timeout and retry
+      final response = await _connectionService.executeWithRetry(
+        () async {
+          return await _supabase.auth.signUp(
+            email: email.trim(),
+            password: password,
+          ).timeout(
+            const Duration(seconds: 20),
+            onTimeout: () {
+              throw TimeoutException('Registration timeout. Please check your internet connection and try again.');
+            },
+          );
+        },
+        maxRetries: 3,
+        timeout: const Duration(seconds: 25),
       );
 
       if (response.user != null) {
-        final userId = response.user!.id;
+        userId = response.user!.id;
 
-        // Create fisherman profile
-        final fishermanData = {
-          'id': userId,
-          'email': email.trim(),
-          'first_name': firstName,
-          'last_name': lastName,
-          'name': '$firstName $lastName',
-          'phone': phone,
-          'user_type': 'fisherman',
-          'registration_date': DateTime.now().toIso8601String(),
-          'is_active': true,
-          if (profileImageUrl != null) 'profile_image_url': profileImageUrl,
-          if (address != null) 'address': address,
-          if (fishingArea != null) 'fishing_area': fishingArea,
-          if (emergencyContactPerson != null) 'emergency_contact_person': emergencyContactPerson,
-        };
+        // Build full name from first, middle, and last name
+        final fullName = [
+          firstName,
+          if (middleName != null && middleName.isNotEmpty) middleName,
+          lastName,
+        ].where((part) => part.isNotEmpty).join(' ');
 
-        await _supabase.from('fishermen').insert(fishermanData);
-
-        // Create boat record
+        // Create boat record first to get boat ID
+        boatId = 'boat_${DateTime.now().millisecondsSinceEpoch}';
         final boatData = {
-          'id': 'boat_${DateTime.now().millisecondsSinceEpoch}',
+          'id': boatId,
           'owner_id': userId,
-          'name': boatName,
+          'name': boatName.isNotEmpty ? boatName : 'Boat-$boatId',
           'type': boatType,
           'registration_number': boatRegistrationNumber,
           'capacity': int.tryParse(boatCapacity) ?? 0,
           'registration_date': DateTime.now().toIso8601String(),
           'is_active': true,
+          'created_at': DateTime.now().toIso8601String(),
         };
 
-        await _supabase.from('boats').insert(boatData);
+        // Insert boat with retry logic
+        try {
+          await _connectionService.executeWithRetry(
+            () async {
+              await _supabase.from('boats').insert(boatData).timeout(
+                const Duration(seconds: 15),
+                onTimeout: () {
+                  throw TimeoutException('Boat insert timeout. Please try again.');
+                },
+              );
+            },
+            maxRetries: 3,
+            timeout: const Duration(seconds: 20),
+          );
+        } catch (boatError) {
+          print('Boat insert error, but continuing with fisherman creation: $boatError');
+          // Continue even if boat insert fails - fisherman can be created without boat
+        }
+
+        // Create fisherman profile with all fields from schema including boat information (denormalized)
+        final fishermanData = {
+          'id': userId,
+          'email': email.trim(),
+          'first_name': firstName,
+          if (middleName != null && middleName.isNotEmpty) 'middle_name': middleName,
+          'last_name': lastName,
+          'name': fullName,
+          'phone': phone,
+          'user_type': 'fisherman',
+          'registration_date': DateTime.now().toIso8601String(),
+          'is_active': true,
+          'created_at': DateTime.now().toIso8601String(),
+          'last_active': DateTime.now().toIso8601String(),
+          // Profile image URL - ensure it's saved
+          if (profileImageUrl != null && profileImageUrl.isNotEmpty) 'profile_image_url': profileImageUrl,
+          if (address != null && address.isNotEmpty) 'address': address,
+          if (fishingArea != null && fishingArea.isNotEmpty) 'fishing_area': fishingArea,
+          if (emergencyContactPerson != null && emergencyContactPerson.isNotEmpty) 'emergency_contact_person': emergencyContactPerson,
+          // Boat information (denormalized)
+          if (boatId != null) 'boat_id': boatId,
+          'boat_name': boatName.isNotEmpty ? boatName : (boatId != null ? 'Boat-$boatId' : null),
+          'boat_type': boatType.isNotEmpty ? boatType : null,
+          'boat_registration_number': boatRegistrationNumber.isNotEmpty ? boatRegistrationNumber : null,
+          'boat_capacity': int.tryParse(boatCapacity) ?? null,
+        };
+
+        // Insert fisherman with retry logic
+        bool insertSucceeded = false;
+        try {
+          await _connectionService.executeWithRetry(
+            () async {
+              await _supabase.from('fishermen').insert(fishermanData).timeout(
+                const Duration(seconds: 15),
+                onTimeout: () {
+                  throw TimeoutException('Fisherman insert timeout. Please try again.');
+                },
+              );
+            },
+            maxRetries: 3,
+            timeout: const Duration(seconds: 20),
+          );
+          insertSucceeded = true;
+        } catch (insertError) {
+          // If insert fails, ALWAYS check if account was actually created
+          print('Fisherman insert error occurred, checking if account exists: $insertError');
+          
+          if (userId != null) {
+            final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
+            if (accountExists) {
+              print('Account exists despite insert error - registration succeeded');
+              return true;
+            }
+          }
+          
+          // If account doesn't exist, check if email is already registered
+          try {
+            final existingByEmail = await _connectionService.executeWithRetry(
+              () async {
+                return await _supabase.from('fishermen').select('id').eq('email', email.trim()).maybeSingle();
+              },
+              maxRetries: 2,
+              timeout: const Duration(seconds: 10),
+            );
+            
+            if (existingByEmail != null) {
+              throw 'An account with this email already exists. Please sign in instead.';
+            }
+          } catch (emailCheckError) {
+            if (emailCheckError.toString().contains('already exists')) {
+              throw emailCheckError;
+            }
+          }
+          
+          throw insertError;
+        }
+
+        // Verify account was created successfully
+        if (userId != null && insertSucceeded) {
+          try {
+            final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
+            if (accountExists) {
+              return true;
+            }
+          } catch (e) {
+            // If verification fails but insert succeeded, assume success
+            print('Verification check failed but insert succeeded - assuming success: $e');
+            return true;
+          }
+        }
 
         return true;
       }
 
       return false;
+    } on TimeoutException {
+      // ALWAYS check if account was created despite timeout
+      if (userId != null) {
+        try {
+          final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
+          if (accountExists) {
+            return true;
+          }
+          
+          final existingByEmail = await _connectionService.executeWithRetry(
+            () async {
+              return await _supabase.from('fishermen').select('id').eq('email', email.trim()).maybeSingle();
+            },
+            maxRetries: 2,
+            timeout: const Duration(seconds: 10),
+          );
+          
+          if (existingByEmail != null) {
+            throw 'An account with this email already exists. Please sign in instead.';
+          }
+        } catch (e) {
+          if (e.toString().contains('already exists')) {
+            rethrow;
+          }
+        }
+      }
+      throw 'Connection timeout. Please check your internet connection and try again.';
+    } on SocketException catch (e) {
+      // ALWAYS check if account was created despite network error
+      if (userId != null) {
+        try {
+          final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
+          if (accountExists) {
+            return true;
+          }
+          
+          final existingByEmail = await _connectionService.executeWithRetry(
+            () async {
+              return await _supabase.from('fishermen').select('id').eq('email', email.trim()).maybeSingle();
+            },
+            maxRetries: 2,
+            timeout: const Duration(seconds: 10),
+          );
+          
+          if (existingByEmail != null) {
+            throw 'An account with this email already exists. Please sign in instead.';
+          }
+        } catch (checkError) {
+          if (checkError.toString().contains('already exists')) {
+            rethrow;
+          }
+        }
+      }
+      throw 'Network error. Please check your internet connection: ${e.message}';
     } on AuthException catch (e) {
+      // Check if account was created despite auth exception
+      if (userId != null) {
+        try {
+          final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
+          if (accountExists) {
+            return true;
+          }
+        } catch (checkError) {
+          // Ignore check errors
+        }
+      }
       throw _getAuthErrorMessage(e.message);
     } catch (e) {
-      throw 'Boat registration failed. Please check your connection.';
+      // ALWAYS check if account was created despite any exception
+      if (userId != null) {
+        try {
+          final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
+          if (accountExists) {
+            return true;
+          }
+          
+          final existingByEmail = await _connectionService.executeWithRetry(
+            () async {
+              return await _supabase.from('fishermen').select('id').eq('email', email.trim()).maybeSingle();
+            },
+            maxRetries: 2,
+            timeout: const Duration(seconds: 10),
+          );
+          
+          if (existingByEmail != null) {
+            throw 'An account with this email already exists. Please sign in instead.';
+          }
+        } catch (checkError) {
+          if (checkError.toString().contains('already exists')) {
+            rethrow;
+          }
+        }
+      }
+      
+      final errorMessage = e.toString().toLowerCase();
+      if (errorMessage.contains('timeout') || errorMessage.contains('connection')) {
+        throw 'Connection timeout. Please check your internet connection and try again.';
+      } else if (errorMessage.contains('socket') || errorMessage.contains('network')) {
+        throw 'Network error. Please check your internet connection and try again.';
+      } else if (errorMessage.contains('already exists') || errorMessage.contains('duplicate')) {
+        throw 'An account with this email already exists. Please sign in instead.';
+      } else {
+        throw 'Boat registration failed: ${e.toString()}. Please check your connection and try again.';
+      }
     }
   }
 
@@ -278,11 +755,26 @@ class AuthService {
   // Logout
   Future<void> logout() async {
     try {
-      await _supabase.auth.signOut();
+      // Sign out from Supabase (if logged in via Supabase)
+      try {
+        await _supabase.auth.signOut();
+      } catch (e) {
+        // Ignore if not logged in via Supabase (e.g., hardcoded admin)
+        print('Supabase sign out note: $e');
+      }
+      
+      // Clear current user
       _currentUser = null;
+      
+      // Clear saved user data and login status from SharedPreferences
       await SharedPreferencesHelper.clearUserData();
+      
+      print('User logged out successfully - session cleared');
     } catch (e) {
       print('Error during logout: $e');
+      // Still try to clear local data even if Supabase logout fails
+      _currentUser = null;
+      await SharedPreferencesHelper.clearUserData();
     }
   }
 

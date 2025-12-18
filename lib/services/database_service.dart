@@ -1,6 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:convert';
 import '../supabase_config.dart';
 import 'connection_service.dart';
+import 'weather_service.dart';
 
 class DatabaseService {
   final SupabaseClient _supabase = SupabaseConfig.client;
@@ -281,6 +283,27 @@ class DatabaseService {
         .order('created_at', ascending: false);
   }
 
+  // Get a single SOS alert by ID
+  Future<Map<String, dynamic>?> getSOSAlertById(String alertId) async {
+    try {
+      return await _connectionService.executeWithRetry(() async {
+        final response = await _supabase
+            .from('sos_alerts')
+            .select('*')
+            .eq('id', alertId)
+            .maybeSingle();
+        
+        if (response != null) {
+          return Map<String, dynamic>.from(response);
+        }
+        return null;
+      });
+    } catch (e) {
+      print('Error fetching SOS alert by ID: $e');
+      return null;
+    }
+  }
+
   // ============================================
   // Live Location Tracking Methods
   // ============================================
@@ -501,6 +524,21 @@ class DatabaseService {
       print('Longitude: $longitude');
       print('Message: $message');
       
+      // Fetch weather data for the alert location
+      Map<String, dynamic>? weatherData;
+      try {
+        final weatherService = WeatherService();
+        weatherData = await weatherService.getWeatherByCoordinates(latitude, longitude);
+        if (weatherData != null) {
+          print('Weather data fetched: $weatherData');
+        } else {
+          print('⚠️ Weather data not available for this location');
+        }
+      } catch (e) {
+        print('⚠️ Error fetching weather data: $e');
+        // Continue without weather data - alert creation should not fail due to weather
+      }
+      
       // Fetch fisherman details to denormalize into sos_alerts
       print('Fetching fisherman details...');
       final fisherman = await _supabase
@@ -521,6 +559,7 @@ class DatabaseService {
         'status': 'active',
         'created_at': DateTime.now().toIso8601String(),
         'resolved_at': null,
+        if (weatherData != null) 'weather_data': weatherData,
       };
 
       // Add denormalized fisherman snapshot if available
@@ -603,7 +642,7 @@ class DatabaseService {
   }
 
   // Update SOS alert status
-  Future<bool> updateSOSAlertStatus(String alertId, String status) async {
+  Future<bool> updateSOSAlertStatus(String alertId, String status, {int? casualties, int? injured}) async {
     return await _connectionService.executeWithRetry(() async {
       try {
         print('=== UPDATING SOS ALERT STATUS ===');
@@ -634,27 +673,46 @@ class DatabaseService {
           updateData['on_the_way_at'] = DateTime.now().toIso8601String();
         }
         
-        // Only set resolved_at if status is 'resolved'
-        if (status == 'resolved') {
+        // Set resolved_at if status is 'inactive' (when marking as resolved)
+        // Also handle 'resolved' status by converting to 'inactive'
+        if (status == 'inactive' || status == 'resolved') {
           updateData['resolved_at'] = DateTime.now().toIso8601String();
+          // Save casualties and injured if provided
+          if (casualties != null) {
+            updateData['casualties'] = casualties;
+          }
+          if (injured != null) {
+            updateData['injured'] = injured;
+          }
+          // Convert 'resolved' to 'inactive' in the database
+          if (status == 'resolved') {
+            updateData['status'] = 'inactive';
+          }
         }
         
         // Update SOS alert status
         // The database trigger will automatically create a notification
         print('Updating alert status in database...');
-        await _supabase
+        print('Update data: $updateData');
+        
+        final updateResponse = await _supabase
             .from('sos_alerts')
             .update(updateData)
-            .eq('id', alertId);
-
-        print('✅ SOS alert status updated: $alertId -> $status');
+            .eq('id', alertId)
+            .select('status')
+            .single();
+        
+        // Get the actual status that was set (in case it was converted)
+        final actualStatus = updateResponse['status']?.toString() ?? updateData['status']?.toString() ?? status;
+        print('✅ SOS alert status updated: $alertId -> $actualStatus');
+        print('✅ Verified status in database: ${updateResponse['status']}');
 
         // Also try to create notification manually (as backup)
         // The trigger should create it, but this ensures it's created even if trigger fails
         try {
           await _createFishermanNotificationForStatusChange(
             alertId: alertId,
-            status: status,
+            status: actualStatus, // Use the actual status that was set
             alertData: alertResponse,
           );
         } catch (notificationError) {
@@ -713,6 +771,28 @@ class DatabaseService {
         title = 'Rescue Team is On The Way';
         message = '$adminName has marked your SOS alert as "On The Way". Help is on the way!';
         notificationData['on_the_way_at'] = DateTime.now().toIso8601String();
+      } else if (status == 'inactive') {
+        notificationType = 'sos_inactive';
+        title = 'Alert Marked as Inactive';
+        message = '$adminName has marked your SOS alert as inactive. The rescue operation is being processed.';
+        notificationData['resolved_at'] = DateTime.now().toIso8601String();
+        if (alertData['casualties'] != null) {
+          notificationData['casualties'] = alertData['casualties'];
+        }
+        if (alertData['injured'] != null) {
+          notificationData['injured'] = alertData['injured'];
+        }
+      } else if (status == 'rescued') {
+        notificationType = 'sos_rescued';
+        title = 'Rescue Completed';
+        message = '$adminName has completed your rescue. You are safe now!';
+        notificationData['resolved_at'] = DateTime.now().toIso8601String();
+        if (alertData['casualties'] != null) {
+          notificationData['casualties'] = alertData['casualties'];
+        }
+        if (alertData['injured'] != null) {
+          notificationData['injured'] = alertData['injured'];
+        }
       } else if (status == 'resolved') {
         notificationType = 'sos_resolved';
         title = 'SOS Alert Resolved';
@@ -968,15 +1048,137 @@ class DatabaseService {
     });
   }
 
-  // Get total rescued count
+  // Get boats by owner ID
+  Future<List<Map<String, dynamic>>> getBoatsByOwnerId(String ownerId) async {
+    return await _connectionService.executeWithRetry(() async {
+      final boats = await _supabase
+          .from('boats')
+          .select('*')
+          .eq('owner_id', ownerId)
+          .eq('is_active', true)
+          .order('created_at', ascending: false);
+      
+      return List<Map<String, dynamic>>.from(boats);
+    });
+  }
+
+  // Get total rescued count (alerts with status 'inactive' - these are resolved alerts)
   Future<int> getTotalRescuedCount() async {
     return await _connectionService.executeWithRetry(() async {
       final rescued = await _supabase
           .from('sos_alerts')
           .select('id')
-          .eq('status', 'resolved');
+          .eq('status', 'inactive');
       
       return rescued.length;
+    });
+  }
+
+  // Get rescue statistics (total rescue, casualties, injured) - from inactive alerts
+  Future<Map<String, int>> getRescueStatistics() async {
+    return await _connectionService.executeWithRetry(() async {
+      final rescued = await _supabase
+          .from('sos_alerts')
+          .select('id, casualties, injured')
+          .eq('status', 'inactive');
+      
+      int totalRescue = rescued.length;
+      int totalCasualties = 0;
+      int totalInjured = 0;
+      
+      for (var alert in rescued) {
+        totalCasualties += (alert['casualties'] as num?)?.toInt() ?? 0;
+        totalInjured += (alert['injured'] as num?)?.toInt() ?? 0;
+      }
+      
+      return {
+        'totalRescue': totalRescue,
+        'casualties': totalCasualties,
+        'injured': totalInjured,
+      };
+    });
+  }
+  
+  // Mark alert as inactive first, then as rescued
+  Future<bool> markAsInactiveThenRescued(String alertId, {int? casualties, int? injured}) async {
+    return await _connectionService.executeWithRetry(() async {
+      try {
+        print('=== MARKING ALERT AS INACTIVE THEN RESCUED ===');
+        print('Alert ID: $alertId');
+        
+        // First, get the SOS alert details
+        final alertResponse = await _supabase
+            .from('sos_alerts')
+            .select('*')
+            .eq('id', alertId)
+            .maybeSingle();
+
+        if (alertResponse == null) {
+          print('❌ SOS alert not found: $alertId');
+          return false;
+        }
+
+        // Step 1: Mark as inactive
+        Map<String, dynamic> inactiveData = {
+          'status': 'inactive',
+          'resolved_at': DateTime.now().toIso8601String(),
+        };
+        
+        if (casualties != null) {
+          inactiveData['casualties'] = casualties;
+        }
+        if (injured != null) {
+          inactiveData['injured'] = injured;
+        }
+        
+        await _supabase
+            .from('sos_alerts')
+            .update(inactiveData)
+            .eq('id', alertId);
+        
+        print('✅ Alert marked as inactive: $alertId');
+        
+        // Small delay to ensure database consistency
+        await Future.delayed(const Duration(milliseconds: 100));
+        
+        // Step 2: Mark as rescued
+        Map<String, dynamic> rescuedData = {
+          'status': 'rescued',
+          'resolved_at': DateTime.now().toIso8601String(),
+        };
+        
+        if (casualties != null) {
+          rescuedData['casualties'] = casualties;
+        }
+        if (injured != null) {
+          rescuedData['injured'] = injured;
+        }
+        
+        await _supabase
+            .from('sos_alerts')
+            .update(rescuedData)
+            .eq('id', alertId);
+        
+        print('✅ Alert marked as rescued: $alertId');
+        
+        // Create notification for fisherman
+        try {
+          await _createFishermanNotificationForStatusChange(
+            alertId: alertId,
+            status: 'rescued',
+            alertData: alertResponse,
+          );
+        } catch (notificationError) {
+          print('⚠️ Manual notification creation failed (trigger should handle it): $notificationError');
+        }
+
+        print('=== STATUS UPDATE COMPLETE ===');
+        return true;
+      } catch (e) {
+        print('❌ Error updating SOS alert: $e');
+        print('Error details: ${e.toString()}');
+        return false;
+      }
     });
   }
 
@@ -992,13 +1194,13 @@ class DatabaseService {
     });
   }
 
-  // Get rescue reports (resolved and active alerts with basic details)
+  // Get rescue reports (resolved and active alerts with basic details including weather)
   Future<List<Map<String, dynamic>>> getRescueReports() async {
     return await _connectionService.executeWithRetry(() async {
-      // Select only columns from sos_alerts to avoid missing FK relation errors
+      // Select columns including weather_data, status, and fisherman_uid for boat lookup
       final response = await _supabase
           .from('sos_alerts')
-          .select('id, status, created_at, resolved_at, fisherman_name, fisherman_email')
+          .select('id, status, created_at, resolved_at, fisherman_uid, fisherman_name, fisherman_email, weather_data, casualties, injured')
           .order('created_at', ascending: false);
 
       // Normalize shape for UI
@@ -1006,13 +1208,79 @@ class DatabaseService {
         final nameFromAlert = (row['fisherman_name']?.toString() ?? '').trim();
         final emailFromAlert = (row['fisherman_email']?.toString() ?? '').trim();
         final fullName = nameFromAlert.isNotEmpty ? nameFromAlert : (emailFromAlert.isNotEmpty ? emailFromAlert : 'Unknown');
+        
+        // Extract weather data with more details
+        String weatherInfo = '-';
+        Map<String, dynamic>? weatherDetails = {};
+        if (row['weather_data'] != null) {
+          try {
+            dynamic weatherJson = row['weather_data'];
+            
+            // Handle JSONB from PostgreSQL - might be a string that needs parsing
+            if (weatherJson is String) {
+              try {
+                weatherJson = jsonDecode(weatherJson);
+              } catch (e) {
+                // If it's not valid JSON, use as-is
+                weatherInfo = weatherJson;
+                print('Weather data is plain string: $weatherJson');
+              }
+            }
+            
+            if (weatherJson is Map) {
+              final temp = weatherJson['temperature'] ?? weatherJson['temp'];
+              final desc = weatherJson['description'] ?? weatherJson['weather'] ?? weatherJson['main'] ?? '';
+              final humidity = weatherJson['humidity'];
+              final windSpeed = weatherJson['windSpeed'] ?? weatherJson['wind']?['speed'] ?? weatherJson['windSpeed'];
+              final pressure = weatherJson['pressure'];
+              
+              // Build detailed weather string
+              final parts = <String>[];
+              if (temp != null) {
+                parts.add('${temp}°C');
+                weatherDetails['temperature'] = temp;
+              }
+              if (desc != null && desc.toString().isNotEmpty) {
+                parts.add(desc.toString());
+                weatherDetails['description'] = desc.toString();
+              }
+              if (humidity != null) {
+                weatherDetails['humidity'] = humidity;
+              }
+              if (windSpeed != null) {
+                weatherDetails['windSpeed'] = windSpeed;
+              }
+              if (pressure != null) {
+                weatherDetails['pressure'] = pressure;
+              }
+              
+              weatherInfo = parts.isNotEmpty ? parts.join(', ') : '-';
+            } else if (weatherJson is String && weatherJson.isNotEmpty) {
+              weatherInfo = weatherJson;
+            }
+          } catch (e) {
+            print('Error parsing weather data: $e');
+            print('Weather data type: ${row['weather_data'].runtimeType}');
+            print('Weather data value: ${row['weather_data']}');
+          }
+        }
+        
+        // Determine if rescued (status is inactive)
+        final isRescued = row['status'] == 'inactive';
 
         return {
           'id': row['id'],
           'status': row['status'],
           'fullName': fullName,
+          'fisherman_uid': row['fisherman_uid'],
           'distressTime': row['created_at'],
           'rescueTime': row['resolved_at'],
+          'weather': weatherInfo,
+          'weatherDetails': weatherDetails,
+          'weatherData': row['weather_data'],
+          'isRescued': isRescued,
+          'casualties': row['casualties'] ?? 0,
+          'injured': row['injured'] ?? 0,
         };
       }).toList();
     });
@@ -1081,6 +1349,66 @@ class DatabaseService {
     }
   }
 
+  // Update fisherman with all fields
+  Future<bool> updateFisherman(String fishermanId, Map<String, dynamic> fishermanData) async {
+    try {
+      // Build update data, excluding id and only including fields that should be updated
+      final updateData = <String, dynamic>{
+        'first_name': fishermanData['first_name'],
+        'last_name': fishermanData['last_name'],
+        'name': fishermanData['name'],
+        'email': fishermanData['email'],
+        'phone': fishermanData['phone'],
+        'user_type': 'fisherman',
+        'is_active': fishermanData['is_active'] ?? true,
+      };
+
+      // Add optional fields if provided
+      if (fishermanData['middle_name'] != null) {
+        updateData['middle_name'] = fishermanData['middle_name'];
+      }
+      if (fishermanData['address'] != null) {
+        updateData['address'] = fishermanData['address'];
+      }
+      if (fishermanData['fishing_area'] != null) {
+        updateData['fishing_area'] = fishermanData['fishing_area'];
+      }
+      if (fishermanData['emergency_contact_person'] != null) {
+        updateData['emergency_contact_person'] = fishermanData['emergency_contact_person'];
+      }
+      // Profile image URL - ensure it's saved
+      if (fishermanData['profile_image_url'] != null && fishermanData['profile_image_url'].toString().isNotEmpty) {
+        updateData['profile_image_url'] = fishermanData['profile_image_url'].toString();
+      } else {
+        // If explicitly set to null/empty, clear the profile image
+        updateData['profile_image_url'] = null;
+      }
+
+      // Add boat information if provided (denormalized)
+      if (fishermanData['boat_name'] != null) {
+        updateData['boat_name'] = fishermanData['boat_name'];
+      }
+      if (fishermanData['boat_type'] != null) {
+        updateData['boat_type'] = fishermanData['boat_type'];
+      }
+      if (fishermanData['boat_registration_number'] != null) {
+        updateData['boat_registration_number'] = fishermanData['boat_registration_number'];
+      }
+
+      await _connectionService.executeWithRetry(() async {
+        await _supabase
+            .from('fishermen')
+            .update(updateData)
+            .eq('id', fishermanId);
+      });
+
+      return true;
+    } catch (e) {
+      print('Error updating fisherman: $e');
+      return false;
+    }
+  }
+
   // Update boat last used
   Future<bool> updateBoatLastUsed(String boatId) async {
     try {
@@ -1092,6 +1420,116 @@ class DatabaseService {
       return true;
     } catch (e) {
       print('Error updating boat last used: $e');
+      return false;
+    }
+  }
+
+  // Get boat by owner ID (get first active boat)
+  Future<Map<String, dynamic>?> getBoatByOwnerId(String ownerId) async {
+    try {
+      return await _connectionService.executeWithRetry(() async {
+        final boats = await _supabase
+            .from('boats')
+            .select('*')
+            .eq('owner_id', ownerId)
+            .eq('is_active', true)
+            .order('created_at', ascending: false)
+            .limit(1);
+        
+        if (boats.isNotEmpty) {
+          return Map<String, dynamic>.from(boats.first);
+        }
+        return null;
+      });
+    } catch (e) {
+      print('Error fetching boat by owner ID: $e');
+      return null;
+    }
+  }
+
+  // Update boat information
+  Future<bool> updateBoat(String boatId, Map<String, dynamic> boatData) async {
+    try {
+      final updateData = <String, dynamic>{};
+      
+      if (boatData['name'] != null) {
+        updateData['name'] = boatData['name'];
+      }
+      if (boatData['type'] != null) {
+        updateData['type'] = boatData['type'];
+      }
+      if (boatData['registration_number'] != null) {
+        updateData['registration_number'] = boatData['registration_number'];
+      }
+      if (boatData['boat_number'] != null) {
+        updateData['name'] = boatData['boat_number']; // boat_number is stored as name
+      }
+
+      await _connectionService.executeWithRetry(() async {
+        await _supabase
+            .from('boats')
+            .update(updateData)
+            .eq('id', boatId);
+      });
+
+      return true;
+    } catch (e) {
+      print('Error updating boat: $e');
+      return false;
+    }
+  }
+
+  // Create or update boat for a fisherman
+  Future<bool> createOrUpdateBoatForFisherman(String ownerId, Map<String, dynamic> boatData) async {
+    try {
+      // First, try to find existing boat
+      final existingBoat = await getBoatByOwnerId(ownerId);
+      
+      final boatId = existingBoat?['id'] ?? 'boat_${DateTime.now().millisecondsSinceEpoch}';
+      final boatName = boatData['boat_number'] ?? boatData['name'] ?? existingBoat?['name'] ?? 'Boat-$boatId';
+      final boatType = boatData['boat_type'] ?? boatData['type'] ?? existingBoat?['type'] ?? '';
+      final boatRegistrationNumber = boatData['registration_number'] ?? existingBoat?['registration_number'] ?? '';
+      
+      if (existingBoat != null) {
+        // Update existing boat
+        await updateBoat(existingBoat['id'], {
+          'name': boatName,
+          'type': boatType,
+          'registration_number': boatRegistrationNumber,
+        });
+      } else {
+        // Create new boat
+        final newBoatData = {
+          'id': boatId,
+          'owner_id': ownerId,
+          'name': boatName,
+          'type': boatType,
+          'registration_number': boatRegistrationNumber,
+          'is_active': true,
+          'created_at': DateTime.now().toIso8601String(),
+        };
+
+        await _connectionService.executeWithRetry(() async {
+          await _supabase.from('boats').insert(newBoatData);
+        });
+      }
+      
+      // Also update fisherman table with boat information (denormalized)
+      await _connectionService.executeWithRetry(() async {
+        await _supabase
+            .from('fishermen')
+            .update({
+              'boat_id': boatId,
+              'boat_name': boatName,
+              'boat_type': boatType,
+              'boat_registration_number': boatRegistrationNumber,
+            })
+            .eq('id', ownerId);
+      });
+
+      return true;
+    } catch (e) {
+      print('Error creating/updating boat: $e');
       return false;
     }
   }

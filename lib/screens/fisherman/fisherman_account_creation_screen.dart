@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../constants/colors.dart';
 import '../../services/auth_service.dart';
+import '../../services/image_upload_service.dart';
 import '../../utils/validators.dart';
 
 class FishermanAccountCreationScreen extends StatefulWidget {
@@ -135,9 +136,44 @@ class _FishermanAccountCreationScreenState extends State<FishermanAccountCreatio
 
     try {
       final authService = AuthService();
+      final imageUploadService = ImageUploadService();
       
-      // For now, we'll create the account without image upload
-      // In a real implementation, you'd upload the image to a storage service first
+      // Upload profile image if selected
+      String? profileImageUrl;
+      if (_profileImage != null) {
+        try {
+          // Generate a temporary user ID for the upload path
+          // We'll use email + timestamp as identifier before account creation
+          final tempUserId = 'temp_${_emailController.text.trim().replaceAll('@', '_').replaceAll('.', '_')}_${DateTime.now().millisecondsSinceEpoch}';
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Uploading profile image...'),
+              duration: Duration(seconds: 1),
+            ),
+          );
+          
+          profileImageUrl = await imageUploadService.uploadProfileImage(_profileImage!, tempUserId);
+          
+          if (profileImageUrl == null || profileImageUrl.isEmpty) {
+            throw Exception('Failed to get image URL after upload');
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Image upload failed: $e. Creating account without image...'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+          // Continue with account creation even if image upload fails
+          profileImageUrl = null;
+        }
+      }
+      
+      // Create account with profile image URL
       final success = await authService.register(
         email: _emailController.text.trim(),
         password: _passwordController.text,
@@ -148,8 +184,7 @@ class _FishermanAccountCreationScreenState extends State<FishermanAccountCreatio
         address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
         fishingArea: _fishingAreaController.text.trim().isEmpty ? null : _fishingAreaController.text.trim(),
         emergencyContactPerson: _emergencyContactController.text.trim().isEmpty ? null : _emergencyContactController.text.trim(),
-        // TODO: Implement image upload to storage service and get URL
-        // profileImageUrl: uploadedImageUrl,
+        profileImageUrl: profileImageUrl,
       );
       
       if (mounted) {
@@ -158,11 +193,15 @@ class _FishermanAccountCreationScreenState extends State<FishermanAccountCreatio
             const SnackBar(
               content: Text('Account created successfully!'),
               backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
             ),
           );
           
-          // Navigate back to login or home
-          Navigator.of(context).pop();
+          // Navigate back to login or home after a short delay
+          await Future.delayed(const Duration(milliseconds: 500));
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -174,12 +213,25 @@ class _FishermanAccountCreationScreenState extends State<FishermanAccountCreatio
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Account creation failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        // Check if the error indicates the account might already exist
+        final errorMessage = e.toString().toLowerCase();
+        if (errorMessage.contains('already exists') || 
+            errorMessage.contains('duplicate') ||
+            errorMessage.contains('unique constraint')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('An account with this email already exists. Please sign in instead.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Account creation failed: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) {

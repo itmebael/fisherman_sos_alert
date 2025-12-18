@@ -85,7 +85,7 @@ class SOSProvider with ChangeNotifier {
 
       await _notificationService.showNotification(
         title: 'SOS Alert Sent',
-        body: 'Your emergency alert has been sent to Salbar_Mangirisda Coast Guard.',
+        body: 'Your emergency alert has been sent to Salbar Mangirisda Coast Guard.',
       );
 
       _isLoading = false;
@@ -102,7 +102,7 @@ class SOSProvider with ChangeNotifier {
   Future<void> _sendToCoastGuard(SOSAlertModel alert) async {
     await Future.delayed(const Duration(seconds: 2));
     
-    print('SOS Alert sent to Salbar_Mangirisda Coast Guard:');
+    print('SOS Alert sent to Salbar Mangirisda Coast Guard:');
     print('Fisherman ID: ${alert.fishermanId}');
     print('Location: ${alert.latitude}, ${alert.longitude}');
     print('Time: ${alert.createdAt}');

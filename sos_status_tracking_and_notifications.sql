@@ -579,6 +579,6 @@ CREATE POLICY "Allow authenticated users to insert notifications" ON public.fish
 -- WHERE fisherman_uid = 'fisherman-uuid-here';
 
 -- =============================================
--- END OF SCRIPT philippinecoastguard@2025 notify pop up
+-- END OF SCRIPT philippinecoastguard@2025 notify pop up phicoastguard@gmail.com profile-images
 -- =============================================
 

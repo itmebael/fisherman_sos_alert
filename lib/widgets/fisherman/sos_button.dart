@@ -128,7 +128,7 @@ class _SOSButtonState extends State<SOSButton>
             ],
           ),
           content: const Text(
-            'Are you sure you want to send an emergency alert to Salbar_Mangirisda Coast Guard?\n\nThis will immediately notify the nearest coast guard station of your location and emergency status.',
+            'Are you sure you want to send an emergency alert to Salbar Mangirisda Coast Guard?\n\nThis will immediately notify the nearest coast guard station of your location and emergency status.',
             style: TextStyle(fontSize: 16, height: 1.4),
           ),
           actions: [
@@ -192,7 +192,7 @@ class _SOSButtonState extends State<SOSButton>
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
-                'SOS Alert sent to Salbar_Mangirisda Coast Guard!',
+                'SOS Alert sent to Salbar Mangirisda Coast Guard!',
                 style: TextStyle(fontSize: 16),
               ),
             ),

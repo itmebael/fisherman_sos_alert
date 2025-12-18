@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../../services/database_service.dart';
 import '../../services/boundary_service.dart';
 import '../../services/location_service.dart';
+import '../../providers/admin_provider_simple.dart';
 import 'dart:async';
 
 class MapWidgetSimple extends StatefulWidget {
@@ -292,22 +294,26 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                     );
                   }
                 });
-              } else if (mounted) {
+              } else {
                 // Just show notification without centering if searched location is active
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: Colors.red,
-                    content: Row(
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text('SOS received from $name (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})')),
-                      ],
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 4),
-                  ),
-                );
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: Colors.red,
+                        content: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('SOS received from $name (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})')),
+                          ],
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 4),
+                      ),
+                    );
+                  }
+                });
               }
               _knownAlertIds.addAll(newIds);
             }
@@ -768,33 +774,63 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       final lng = (alert['longitude'] as num).toDouble();
       final fishermanId = alert['fisherman_id']?.toString() ?? '';
       
+      // Get fisherman name
+      final fishermanName = alert['fisherman_name'] ?? 
+                           alert['fisherman_first_name'] ?? 
+                           alert['fishermen']?['name'] ?? 
+                           alert['fisherman_email'] ?? 
+                           'Unknown';
+      
       // Check if this fisherman is outside boundary
       final isOutsideBoundary = _outsideBoundaryFishermen.contains(fishermanId);
       
       return Marker(
         point: latlong.LatLng(lat, lng),
-        width: 40,
-        height: 40,
+        width: 80,
+        height: 60,
         child: GestureDetector(
           onTap: () => _showAlertDetails(alert),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isOutsideBoundary ? Colors.orange : Colors.red,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: (isOutsideBoundary ? Colors.orange : Colors.red).withOpacity(0.3),
-                  blurRadius: 8,
-                  spreadRadius: 2,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              ],
-            ),
-            child: Icon(
-              isOutsideBoundary ? Icons.location_off : Icons.warning,
-              color: Colors.white,
-              size: 20,
-            ),
+                child: Text(
+                  fishermanName.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Container(
+                decoration: BoxDecoration(
+                  color: isOutsideBoundary ? Colors.orange : Colors.red,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isOutsideBoundary ? Colors.orange : Colors.red).withOpacity(0.3),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  isOutsideBoundary ? Icons.location_off : Icons.warning,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -1132,23 +1168,25 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
           _outsideBoundaryFishermen.add(fishermanId);
           
           // Show notification for fisherman outside boundary
-          if (mounted) {
-            final name = alert['fishermen'] != null ? (alert['fishermen']['name']?.toString() ?? 'Unknown') : 'Fisherman';
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                backgroundColor: Colors.orange,
-                content: Row(
-                  children: [
-                    const Icon(Icons.location_off, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('$name is outside safe fishing zone!')),
-                  ],
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              final name = alert['fishermen'] != null ? (alert['fishermen']['name']?.toString() ?? 'Unknown') : 'Fisherman';
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: Colors.orange,
+                  content: Row(
+                    children: [
+                      const Icon(Icons.location_off, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('$name is outside safe fishing zone!')),
+                    ],
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 4),
                 ),
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
+              );
+            }
+          });
         } else if (isInsideBoundary && _outsideBoundaryFishermen.contains(fishermanId)) {
           _outsideBoundaryFishermen.remove(fishermanId);
         }
@@ -1157,19 +1195,70 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
   }
 
   void _showAlertDetails(Map<String, dynamic> alert) {
+    // Get fisherman information from denormalized fields
+    final fishermanName = alert['fisherman_name'] ?? 
+                         alert['fisherman_first_name'] ?? 
+                         (alert['fisherman_first_name'] != null && alert['fisherman_last_name'] != null
+                           ? '${alert['fisherman_first_name']} ${alert['fisherman_last_name']}'
+                           : null) ??
+                         alert['fishermen']?['name'] ?? 
+                         alert['fisherman_email'] ?? 
+                         'Unknown';
+    
+    final fishermanEmail = alert['fisherman_email'] ?? '-';
+    final fishermanPhone = alert['fisherman_phone'] ?? '-';
+    final fishermanAddress = alert['fisherman_address'] ?? '-';
+    final fishingArea = alert['fisherman_fishing_area'] ?? '-';
+    final emergencyContact = alert['fisherman_emergency_contact_person'] ?? '-';
+    
+    final alertTime = alert['created_at']?.toString() ?? '-';
+    final status = alert['status']?.toString() ?? 'active';
+    final latitude = alert['latitude']?.toString() ?? '-';
+    final longitude = alert['longitude']?.toString() ?? '-';
+    final message = alert['message']?.toString() ?? 'SOS Alert';
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('SOS Alert Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: const Row(
           children: [
-            Text('Fisherman: ${(alert['fishermen'] != null ? (alert['fishermen']['name'] ?? '') : (alert['fishermanName'] ?? 'Unknown')) as String}'),
-            if (alert['boats'] != null) Text('Boat: ${alert['boats']['boat_number']?.toString() ?? '-'}'),
-            Text('Time: ${alert['created_at']?.toString() ?? ''}'),
-            Text('Status: ${alert['status']?.toString() ?? 'active'}'),
+            Icon(Icons.emergency, color: Colors.red),
+            SizedBox(width: 8),
+            Text('SOS Alert Details'),
           ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Fisherman Information Section
+              const Text(
+                'Fisherman Information:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              _buildInfoRow('Name', fishermanName.toString()),
+              _buildInfoRow('Email', fishermanEmail.toString()),
+              if (fishermanPhone != '-') _buildInfoRow('Phone', fishermanPhone.toString()),
+              if (fishermanAddress != '-') _buildInfoRow('Address', fishermanAddress.toString()),
+              if (fishingArea != '-') _buildInfoRow('Fishing Area', fishingArea.toString()),
+              if (emergencyContact != '-') _buildInfoRow('Emergency Contact', emergencyContact.toString()),
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 12),
+              // Alert Information Section
+              const Text(
+                'Alert Information:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              _buildInfoRow('Status', status.toUpperCase()),
+              _buildInfoRow('Message', message),
+              _buildInfoRow('Time', alertTime),
+              _buildInfoRow('Location', 'Lat: $latitude, Lng: $longitude'),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1204,6 +1293,35 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       ),
     );
   }
+  
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
 
   void _notifyOnTheWay(String alertId) async {
@@ -1227,24 +1345,115 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
   }
 
   void _markAsResolved(String alertId) async {
-    // Optionally update status in Supabase; UI will auto-update via stream
-    try {
-      await DatabaseService().updateSOSAlertStatus(alertId, 'resolved');
+    final databaseService = DatabaseService();
+    
+    // Get alert details first
+    final alert = await databaseService.getSOSAlertById(alertId);
+    if (alert == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error: Alert not found'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+    
+    final fishermanName = alert['fisherman_name'] ?? 
+                         alert['fisherman_first_name'] ?? 
+                         alert['fisherman_email'] ?? 
+                         'fisherman';
+    
+    // Show resolve dialog with statistics input (same as rescue notifications page)
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => _ResolveDialog(
+        fishermanName: fishermanName.toString(),
+      ),
+    );
+
+    if (result != null && result['confirmed'] == true) {
+      // Show loading indicator
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Row(
               children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 8),
-                Text('Alert marked as resolved'),
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+                SizedBox(width: 16),
+                Text('Updating alert status...'),
               ],
             ),
-            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
       }
-    } catch (_) {}
+
+      try {
+        final casualties = result['casualties'] as int? ?? 0;
+        final injured = result['injured'] as int? ?? 0;
+        
+        // Mark as inactive when resolved is clicked
+        final success = await databaseService.updateSOSAlertStatus(
+          alertId,
+          'inactive',
+          casualties: casualties,
+          injured: injured,
+        );
+        
+        if (success) {
+          // Wait a moment for database to update
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          // Refresh dashboard data if available
+          if (mounted) {
+            try {
+              final adminProvider = Provider.of<AdminProviderSimple>(context, listen: false);
+              await adminProvider.loadDashboardData();
+            } catch (e) {
+              print('Could not refresh dashboard: $e');
+            }
+          }
+          
+          // Get statistics and show popup
+          final stats = await databaseService.getRescueStatistics();
+          
+          if (mounted) {
+            // Show statistics popup
+            await showDialog(
+              context: context,
+              builder: (context) => _RescueStatisticsDialog(
+                totalRescue: stats['totalRescue'] ?? 0,
+                casualties: stats['casualties'] ?? 0,
+                injured: stats['injured'] ?? 0,
+              ),
+            );
+          }
+        } else {
+          throw Exception('Failed to update alert status');
+        }
+      } catch (e) {
+        print('Error updating alert status: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: ${e.toString()}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    }
   }
 
   void _checkCurrentUserBoundaryStatus() async {
@@ -1261,5 +1470,165 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     } catch (e) {
       print('Error checking boundary status: $e');
     }
+  }
+}
+
+// Resolve Dialog with statistics input (same as rescue notifications page)
+class _ResolveDialog extends StatefulWidget {
+  final String fishermanName;
+  
+  const _ResolveDialog({required this.fishermanName});
+  
+  @override
+  State<_ResolveDialog> createState() => _ResolveDialogState();
+}
+
+class _ResolveDialogState extends State<_ResolveDialog> {
+  final TextEditingController _casualtiesController = TextEditingController(text: '0');
+  final TextEditingController _injuredController = TextEditingController(text: '0');
+  
+  @override
+  void dispose() {
+    _casualtiesController.dispose();
+    _injuredController.dispose();
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Mark as Resolved'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Are you sure you want to mark this SOS alert from ${widget.fishermanName} as resolved?'),
+            const SizedBox(height: 16),
+            const Text('Rescue Statistics:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _casualtiesController,
+              decoration: const InputDecoration(
+                labelText: 'Casualties/Dead',
+                hintText: 'Enter number',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _injuredController,
+              decoration: const InputDecoration(
+                labelText: 'Injured',
+                hintText: 'Enter number',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, {'confirmed': false}),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, {
+              'confirmed': true,
+              'casualties': int.tryParse(_casualtiesController.text) ?? 0,
+              'injured': int.tryParse(_injuredController.text) ?? 0,
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Resolve'),
+        ),
+      ],
+    );
+  }
+}
+
+// Rescue Statistics Dialog (same as rescue notifications page)
+class _RescueStatisticsDialog extends StatelessWidget {
+  final int totalRescue;
+  final int casualties;
+  final int injured;
+  
+  const _RescueStatisticsDialog({
+    required this.totalRescue,
+    required this.casualties,
+    required this.injured,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.green, size: 28),
+          SizedBox(width: 8),
+          Text('Rescue Completed'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Rescue Statistics Summary:',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 16),
+          _buildStatRow('Total Rescue', totalRescue.toString(), Colors.green),
+          const SizedBox(height: 12),
+          _buildStatRow('Casualties/Dead', casualties.toString(), Colors.red),
+          const SizedBox(height: 12),
+          _buildStatRow('Injured', injured.toString(), Colors.orange),
+        ],
+      ),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('OK'),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildStatRow(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

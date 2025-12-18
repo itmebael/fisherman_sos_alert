@@ -25,6 +25,50 @@ class WeatherService {
   };
 
   /// Get current weather for a specific Philippine city
+  /// Get current weather by coordinates (for SOS alerts)
+  Future<Map<String, dynamic>?> getWeatherByCoordinates(double latitude, double longitude) async {
+    try {
+      final url = '$_baseUrl/weather?lat=$latitude&lon=$longitude&appid=$_apiKey&units=metric';
+      
+      final response = await http.get(Uri.parse(url)).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Weather API timeout');
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        // Format weather data for SOS alerts
+        final main = data['main'];
+        final weather = data['weather'] is List && (data['weather'] as List).isNotEmpty 
+            ? (data['weather'] as List)[0] 
+            : {};
+        final wind = data['wind'] ?? {};
+        
+        return {
+          'temperature': main?['temp']?.round(),
+          'feelsLike': main?['feels_like']?.round(),
+          'humidity': main?['humidity'],
+          'pressure': main?['pressure'],
+          'description': weather['description'] ?? '',
+          'main': weather['main'] ?? '',
+          'icon': weather['icon'] ?? '',
+          'windSpeed': wind['speed'] ?? 0,
+          'windDirection': wind['deg'] ?? 0,
+          'visibility': data['visibility'] != null ? (data['visibility'] / 1000).round() : null,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+      } else {
+        print('Weather API returned status: ${response.statusCode}');
+        return null;
+      }
+    } catch (e) {
+      print('Weather API Error (coordinates): $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> getCurrentWeather(String cityName) async {
     try {
       final city = _philippineCities[cityName];

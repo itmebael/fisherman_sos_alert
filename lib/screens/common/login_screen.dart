@@ -160,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           const SizedBox(height: 40),
                           // App name with modern typography
                           const Text(
-                            'Salbar_Mangirisda',
+                            'Salbar Mangirisda',
                             style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.w800,

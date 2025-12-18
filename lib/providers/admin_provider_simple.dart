@@ -3,6 +3,7 @@ import '../models/user_model.dart';
 import '../models/sos_alert_model.dart';
 import '../models/device_model.dart';
 import '../services/database_service.dart';
+import '../services/auth_service.dart';
 
 class AdminProviderSimple with ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
@@ -179,9 +180,39 @@ class AdminProviderSimple with ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      // This would typically call a service method to create user
-      // For now, we'll simulate the creation
-      await Future.delayed(const Duration(seconds: 1));
+      final authService = AuthService();
+      
+      // Get form data
+      final firstName = userData['first_name'] ?? '';
+      final middleName = userData['middle_name'] ?? '';
+      final lastName = userData['last_name'] ?? '';
+
+      // Create user using auth service (full name is built internally)
+      // Extract boat information
+      final boatNumber = userData['boat_number']?.toString() ?? '';
+      final boatType = userData['boat_type']?.toString() ?? '';
+      final boatRegistrationNumber = userData['registration_number']?.toString() ?? '';
+      
+      final success = await authService.registerBoatAndFisherman(
+        email: userData['email'] ?? '',
+        password: userData['password'] ?? '',
+        firstName: firstName,
+        lastName: lastName,
+        middleName: middleName.toString().isNotEmpty ? middleName.toString() : null,
+        phone: userData['phone'] ?? '',
+        boatName: boatNumber.isNotEmpty ? boatNumber : 'Boat-${DateTime.now().millisecondsSinceEpoch}',
+        boatType: boatType,
+        boatRegistrationNumber: boatRegistrationNumber,
+        boatCapacity: '0',
+        profileImageUrl: userData['profile_image_url']?.toString(),
+        address: userData['address']?.toString(),
+        fishingArea: userData['fishing_area']?.toString(),
+        emergencyContactPerson: userData['emergency_contact_person']?.toString(),
+      );
+
+      if (!success) {
+        throw Exception('Failed to create user');
+      }
       
       // Reload users to include the new one
       await loadUsersWithBoats();
@@ -189,6 +220,9 @@ class AdminProviderSimple with ChangeNotifier {
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -199,9 +233,57 @@ class AdminProviderSimple with ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      // This would typically call a service method to update user
-      // For now, we'll simulate the update
-      await Future.delayed(const Duration(seconds: 1));
+      // Build full name
+      final firstName = userData['first_name'] ?? '';
+      final middleName = userData['middle_name'] ?? '';
+      final lastName = userData['last_name'] ?? '';
+      final fullName = [
+        firstName,
+        if (middleName != null && middleName.toString().isNotEmpty) middleName,
+        lastName,
+      ].where((part) => part.toString().isNotEmpty).join(' ');
+
+      // Prepare fisherman data including boat information (denormalized)
+      final fishermanData = {
+        'first_name': firstName,
+        'middle_name': middleName.toString().isNotEmpty ? middleName.toString() : null,
+        'last_name': lastName,
+        'name': fullName,
+        'email': userData['email'] ?? '',
+        'phone': userData['phone'] ?? '',
+        'address': userData['address']?.toString(),
+        'fishing_area': userData['fishing_area']?.toString(),
+        'emergency_contact_person': userData['emergency_contact_person']?.toString(),
+        'is_active': userData['is_active'] ?? true,
+        // Profile image URL - ensure it's saved
+        'profile_image_url': userData['profile_image_url']?.toString(),
+        // Boat information (denormalized to fishermen table)
+        'boat_name': userData['boat_number']?.toString(),
+        'boat_type': userData['boat_type']?.toString(),
+        'boat_registration_number': userData['registration_number']?.toString(),
+      };
+
+      // Update fisherman (includes boat info)
+      final success = await _databaseService.updateFisherman(userId, fishermanData);
+      
+      if (!success) {
+        throw Exception('Failed to update user');
+      }
+
+      // Also update boat table to keep it in sync
+      final boatNumber = userData['boat_number']?.toString();
+      final boatType = userData['boat_type']?.toString();
+      final boatRegistrationNumber = userData['registration_number']?.toString();
+      
+      if (boatNumber != null || boatType != null || boatRegistrationNumber != null) {
+        final boatData = {
+          'boat_number': boatNumber,
+          'boat_type': boatType,
+          'registration_number': boatRegistrationNumber,
+        };
+        
+        await _databaseService.createOrUpdateBoatForFisherman(userId, boatData);
+      }
       
       // Reload users to reflect changes
       await loadUsersWithBoats();
@@ -209,6 +291,9 @@ class AdminProviderSimple with ChangeNotifier {
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

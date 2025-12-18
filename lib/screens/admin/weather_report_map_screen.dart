@@ -447,7 +447,7 @@ class _WeatherReportMapScreenState extends State<WeatherReportMapScreen> {
             ),
             const SizedBox(width: 16),
             const Text(
-              "Salbar_Mangirisda",
+              "Salbar Mangirisda",
               style: TextStyle(
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,

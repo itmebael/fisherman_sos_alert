@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../../constants/colors.dart';
+import '../../constants/routes.dart';
 import '../../services/database_service.dart';
+import '../../providers/admin_provider_simple.dart';
 import '../admin/admin_drawer.dart';
 
 class RescueNotificationsPage extends StatefulWidget {
@@ -44,6 +47,9 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
         alerts = await _databaseService.getSOSAlerts();
       }
 
+      // Fetch boat information for each alert
+      alerts = await _enrichAlertsWithBoatInfo(alerts);
+
       setState(() {
         _alerts = alerts;
         _isLoading = false;
@@ -55,6 +61,47 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _enrichAlertsWithBoatInfo(List<Map<String, dynamic>> alerts) async {
+    final enrichedAlerts = <Map<String, dynamic>>[];
+    
+    for (var alert in alerts) {
+      final enrichedAlert = Map<String, dynamic>.from(alert);
+      final fishermanUid = alert['fisherman_uid']?.toString();
+      
+      if (fishermanUid != null && fishermanUid.isNotEmpty) {
+        try {
+          // Fetch boat information for this fisherman
+          final boats = await _databaseService.getBoatsByOwnerId(fishermanUid);
+          if (boats.isNotEmpty) {
+            final boat = boats.first;
+            // Try different possible field names (registration_number is the most common identifier)
+            enrichedAlert['boat_number'] = boat['registration_number'] ?? 
+                                          boat['registrationNumber'] ??
+                                          boat['boat_number'] ?? 
+                                          boat['boatNumber'] ?? 
+                                          boat['name'] ??
+                                          boat['id'] ?? 
+                                          '-';
+            enrichedAlert['boat_name'] = boat['name'];
+            enrichedAlert['boat_type'] = boat['type'] ?? boat['boat_type'] ?? boat['boatType'];
+            enrichedAlert['boat_registration_number'] = boat['registration_number'] ?? boat['registrationNumber'];
+          } else {
+            enrichedAlert['boat_number'] = '-';
+          }
+        } catch (e) {
+          print('Error fetching boat info for fisherman $fishermanUid: $e');
+          enrichedAlert['boat_number'] = '-';
+        }
+      } else {
+        enrichedAlert['boat_number'] = '-';
+      }
+      
+      enrichedAlerts.add(enrichedAlert);
+    }
+    
+    return enrichedAlerts;
   }
 
   // Method to toggle between active and all alerts
@@ -93,7 +140,7 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
             const SizedBox(width: 16),
             // App title
             Text(
-              "Salbar_Mangirisda",
+              "Salbar Mangirisda",
               style: const TextStyle(
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,
@@ -244,16 +291,40 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
                                             separatorBuilder: (_, __) => const SizedBox(height: 16),
                                             itemBuilder: (context, index) {
                                               final a = _alerts[index];
-                                              final fishermanName = (a['fisherman_name'] ?? 
-                                                                   a['fisherman_first_name'] ?? 
-                                                                   a['fisherman_email'] ?? 
-                                                                   'Unknown').toString();
-                                              final boatNumber = a['fisherman_boat_number']?.toString() ?? 
-                                                               a['boat_number']?.toString() ?? 
+                                              
+                                              // Get fisherman name with better fallback logic
+                                              String fishermanName = 'Unknown';
+                                              if (a['fisherman_name'] != null && a['fisherman_name'].toString().isNotEmpty) {
+                                                fishermanName = a['fisherman_name'].toString();
+                                              } else if (a['fisherman_first_name'] != null && a['fisherman_last_name'] != null) {
+                                                final firstName = a['fisherman_first_name'].toString().trim();
+                                                final lastName = a['fisherman_last_name'].toString().trim();
+                                                fishermanName = '$firstName $lastName'.trim();
+                                                if (fishermanName.isEmpty) {
+                                                  fishermanName = a['fisherman_first_name']?.toString() ?? 'Unknown';
+                                                }
+                                              } else if (a['fisherman_first_name'] != null && a['fisherman_first_name'].toString().isNotEmpty) {
+                                                fishermanName = a['fisherman_first_name'].toString();
+                                              } else if (a['fisherman_email'] != null && a['fisherman_email'].toString().isNotEmpty) {
+                                                fishermanName = a['fisherman_email'].toString();
+                                              }
+                                              
+                                              // Get boat number from enriched alert data
+                                              final boatNumber = a['boat_number']?.toString() ?? 
+                                                               a['boat_registration_number']?.toString() ??
                                                                '-';
-                                              final timestamp = a['created_at']?.toString() ?? 
-                                                              a['alertTime']?.toString() ?? 
-                                                              '';
+                                              
+                                              // Format timestamp
+                                              String timestamp = '';
+                                              if (a['created_at'] != null) {
+                                                try {
+                                                  final dateTime = DateTime.parse(a['created_at'].toString());
+                                                  timestamp = '${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+                                                } catch (e) {
+                                                  timestamp = a['created_at'].toString();
+                                                }
+                                              }
+                                              
                                               return _buildEmergencyAlertCard(
                                                 context: context,
                                                 alert: a,
@@ -346,20 +417,109 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
           
           const SizedBox(height: 16),
           
-          // Fisherman info and timestamp
+          // Fisherman info
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'From: $fishermanName    Boat NO: $boatNumber',
-                style: const TextStyle(
+              const Text(
+                'Fisherman: ',
+                style: TextStyle(
                   color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
               ),
+              Expanded(
+                child: Text(
+                  fishermanName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
+          
+          // Additional fisherman details if available
+          if (alert['fisherman_email'] != null && alert['fisherman_email'].toString().isNotEmpty && 
+              fishermanName != alert['fisherman_email'].toString()) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Text(
+                  'Email: ',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    alert['fisherman_email'].toString(),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          
+          if (alert['fisherman_phone'] != null && alert['fisherman_phone'].toString().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Text(
+                  'Phone: ',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    alert['fisherman_phone'].toString(),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          
+          // Boat information
+          if (boatNumber != '-') ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Text(
+                  'Boat: ',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    boatNumber,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           
           const SizedBox(height: 8),
           
@@ -525,52 +685,31 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
   }
 
   void _showLocationOnMap(BuildContext context, Map<String, dynamic> alert) {
-    // Navigate to map view or show location details
-    final fishermanPhone = alert['fisherman_phone']?.toString() ?? 
-                          alert['phone']?.toString();
-    final hasPhone = fishermanPhone != null && fishermanPhone.isNotEmpty;
+    // Navigate to maritime map with the alert location
+    final latitude = (alert['latitude'] as num?)?.toDouble();
+    final longitude = (alert['longitude'] as num?)?.toDouble();
+    final alertId = alert['id']?.toString();
     
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('SOS Alert Location'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Fisherman: ${alert['fisherman_name'] ?? alert['fisherman_first_name'] ?? alert['fisherman_email'] ?? 'Unknown'}'),
-            if (hasPhone) ...[
-              const SizedBox(height: 8),
-              Text('Phone: $fishermanPhone'),
-            ],
-            const SizedBox(height: 8),
-            Text('Latitude: ${alert['latitude']}'),
-            Text('Longitude: ${alert['longitude']}'),
-            Text('Time: ${alert['created_at']}'),
-            Text('Status: ${alert['status']}'),
-          ],
+    if (latitude != null && longitude != null && alertId != null) {
+      // Navigate to admin map with the alert location as searched location
+      Navigator.pushNamed(
+        context,
+        AppRoutes.adminMap,
+        arguments: {
+          'alertId': alertId,
+          'latitude': latitude,
+          'longitude': longitude,
+        },
+      );
+    } else {
+      // Show error if location data is missing
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: Alert location data is missing'),
+          backgroundColor: Colors.red,
         ),
-        actions: [
-          if (hasPhone)
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _makePhoneCall(fishermanPhone);
-              },
-              icon: const Icon(Icons.phone, size: 18),
-              label: const Text('Call Fisherman'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-              ),
-            ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 
   void _notifyOnTheWay(BuildContext context, Map<String, dynamic> alert) async {
@@ -666,30 +805,15 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
       return;
     }
 
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
+    // Show confirmation dialog with statistics input
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Mark as Resolved'),
-        content: Text('Are you sure you want to mark this SOS alert from ${alert['fisherman_name'] ?? alert['fisherman_first_name'] ?? alert['fisherman_email'] ?? 'fisherman'} as resolved?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Resolve'),
-          ),
-        ],
+      builder: (context) => _ResolveDialog(
+        fishermanName: alert['fisherman_name'] ?? alert['fisherman_first_name'] ?? alert['fisherman_email'] ?? 'fisherman',
       ),
     );
 
-    if (confirmed == true) {
+    if (result != null && result['confirmed'] == true) {
       // Show loading indicator
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -714,27 +838,42 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
       }
 
       try {
-        // Update alert status in database
-        final success = await _databaseService.updateSOSAlertStatus(alertId, 'resolved');
+        final casualties = result['casualties'] as int? ?? 0;
+        final injured = result['injured'] as int? ?? 0;
+        
+        // Mark as inactive when resolved is clicked
+        final success = await _databaseService.updateSOSAlertStatus(
+          alertId,
+          'inactive',
+          casualties: casualties,
+          injured: injured,
+        );
         
         if (success) {
+          // Wait a moment for database to update
+          await Future.delayed(const Duration(milliseconds: 500));
+          
           // Reload alerts to get updated data
           await _loadAlerts();
           
+          // Refresh dashboard data
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text('SOS alert from ${alert['fisherman_name'] ?? alert['fisherman_first_name'] ?? alert['fisherman_email'] ?? 'fisherman'} marked as resolved!'),
-                    ),
-                  ],
-                ),
-                backgroundColor: Colors.green,
-                duration: const Duration(seconds: 3),
+            // Trigger dashboard refresh if available
+            final adminProvider = Provider.of<AdminProviderSimple>(context, listen: false);
+            await adminProvider.loadDashboardData();
+          }
+          
+          // Get statistics and show popup
+          final stats = await _databaseService.getRescueStatistics();
+          
+          if (context.mounted) {
+            // Show statistics popup
+            await showDialog(
+              context: context,
+              builder: (context) => _RescueStatisticsDialog(
+                totalRescue: stats['totalRescue'] ?? 0,
+                casualties: stats['casualties'] ?? 0,
+                injured: stats['injured'] ?? 0,
               ),
             );
           }
@@ -763,8 +902,12 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
         return const Color(0xFFE53E3E); // Red
       case 'on_the_way':
         return const Color(0xFF3182CE); // Blue
-      case 'resolved':
+      case 'inactive':
+        return const Color(0xFF718096); // Gray
+      case 'rescued':
         return const Color(0xFF38A169); // Green
+      case 'resolved':
+        return const Color(0xFF38A169); // Green (for backward compatibility)
       default:
         return const Color(0xFFE53E3E); // Red
     }
@@ -776,8 +919,12 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
         return Icons.warning;
       case 'on_the_way':
         return Icons.directions_boat;
-      case 'resolved':
+      case 'inactive':
+        return Icons.pause_circle;
+      case 'rescued':
         return Icons.check_circle;
+      case 'resolved':
+        return Icons.check_circle; // for backward compatibility
       default:
         return Icons.warning;
     }
@@ -789,8 +936,12 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
         return 'Emergency Alert!';
       case 'on_the_way':
         return 'Rescue Team En Route';
+      case 'inactive':
+        return 'Alert Inactive';
+      case 'rescued':
+        return 'Rescue Completed';
       case 'resolved':
-        return 'Alert Resolved';
+        return 'Alert Resolved'; // for backward compatibility
       default:
         return 'Emergency Alert!';
     }
@@ -802,10 +953,174 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
         return 'Fisherman in distress. Immediate rescue needed at sea.\nPlease respond urgently.';
       case 'on_the_way':
         return 'Rescue team is on the way to the location.\nMonitor the situation.';
+      case 'inactive':
+        return 'This SOS alert has been marked as inactive.\nProcessing rescue status.';
+      case 'rescued':
+        return 'Rescue operation completed successfully.\nFisherman has been rescued.';
       case 'resolved':
-        return 'This SOS alert has been resolved.\nFisherman is safe.';
+        return 'This SOS alert has been resolved.\nFisherman is safe.'; // for backward compatibility
       default:
         return 'Fisherman in distress. Immediate rescue needed at sea.\nPlease respond urgently.';
     }
+  }
+}
+
+// Resolve Dialog with statistics input
+class _ResolveDialog extends StatefulWidget {
+  final String fishermanName;
+  
+  const _ResolveDialog({required this.fishermanName});
+  
+  @override
+  State<_ResolveDialog> createState() => _ResolveDialogState();
+}
+
+class _ResolveDialogState extends State<_ResolveDialog> {
+  final TextEditingController _casualtiesController = TextEditingController(text: '0');
+  final TextEditingController _injuredController = TextEditingController(text: '0');
+  
+  @override
+  void dispose() {
+    _casualtiesController.dispose();
+    _injuredController.dispose();
+    super.dispose();
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Mark as Resolved'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Are you sure you want to mark this SOS alert from ${widget.fishermanName} as resolved?'),
+            const SizedBox(height: 16),
+            const Text('Rescue Statistics:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _casualtiesController,
+              decoration: const InputDecoration(
+                labelText: 'Casualties/Dead',
+                hintText: 'Enter number',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _injuredController,
+              decoration: const InputDecoration(
+                labelText: 'Injured',
+                hintText: 'Enter number',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, {'confirmed': false}),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context, {
+              'confirmed': true,
+              'casualties': int.tryParse(_casualtiesController.text) ?? 0,
+              'injured': int.tryParse(_injuredController.text) ?? 0,
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Resolve'),
+        ),
+      ],
+    );
+  }
+}
+
+// Rescue Statistics Dialog
+class _RescueStatisticsDialog extends StatelessWidget {
+  final int totalRescue;
+  final int casualties;
+  final int injured;
+  
+  const _RescueStatisticsDialog({
+    required this.totalRescue,
+    required this.casualties,
+    required this.injured,
+  });
+  
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.green, size: 28),
+          SizedBox(width: 8),
+          Text('Rescue Completed'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Rescue Statistics Summary:',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 16),
+          _buildStatRow('Total Rescue', totalRescue.toString(), Colors.green),
+          const SizedBox(height: 12),
+          _buildStatRow('Casualties/Dead', casualties.toString(), Colors.red),
+          const SizedBox(height: 12),
+          _buildStatRow('Injured', injured.toString(), Colors.orange),
+        ],
+      ),
+      actions: [
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('OK'),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildStatRow(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

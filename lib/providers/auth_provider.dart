@@ -155,13 +155,32 @@ class AuthProvider with ChangeNotifier {
   // Check auth status (useful for splash screen)
   Future<void> checkAuthStatus() async {
     try {
+      // Initialize auth service to restore session from SharedPreferences or Supabase
+      await _authService.initialize();
+      
       final isLoggedIn = _authService.isLoggedIn;
       if (isLoggedIn) {
         _currentUser = _authService.currentUser;
         _isAuthenticated = true;
+        
+        // Also check Supabase session for regular users
+        try {
+          final authState = await _authService.authStateChanges.first.timeout(
+            const Duration(seconds: 2),
+          );
+          if (authState.session != null) {
+            _supabaseUser = authState.session!.user;
+          }
+        } catch (e) {
+          // Ignore timeout or errors - user might be hardcoded admin or session expired
+          if (kDebugMode) {
+            print('Supabase session check: $e');
+          }
+        }
       } else {
         _currentUser = null;
         _isAuthenticated = false;
+        _supabaseUser = null;
       }
       notifyListeners();
     } catch (e) {
@@ -169,6 +188,8 @@ class AuthProvider with ChangeNotifier {
         print('Auth status check error: $e');
       }
       _isAuthenticated = false;
+      _currentUser = null;
+      _supabaseUser = null;
       notifyListeners();
     }
   }

@@ -14,23 +14,35 @@ class UsersRegistrationPageSimple extends StatefulWidget {
 class _UsersRegistrationPageSimpleState extends State<UsersRegistrationPageSimple> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
+  final _middleNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
-  String _selectedUserType = 'fisherman';
+  final _addressController = TextEditingController();
+  final _fishingAreaController = TextEditingController();
+  final _emergencyContactController = TextEditingController();
+  final _boatNumberController = TextEditingController();
+  final _boatTypeController = TextEditingController();
+  final _registrationNumberController = TextEditingController();
   bool _isLoading = false;
 
   @override
   void dispose() {
     _firstNameController.dispose();
+    _middleNameController.dispose();
     _lastNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _addressController.dispose();
+    _fishingAreaController.dispose();
+    _emergencyContactController.dispose();
+    _boatNumberController.dispose();
+    _boatTypeController.dispose();
+    _registrationNumberController.dispose();
     super.dispose();
   }
 
@@ -49,13 +61,28 @@ class _UsersRegistrationPageSimpleState extends State<UsersRegistrationPageSimpl
     try {
       final authService = AuthService();
       
-      final success = await authService.register(
+      // Get form values
+      final firstName = _firstNameController.text.trim();
+      final middleName = _middleNameController.text.trim();
+      final lastName = _lastNameController.text.trim();
+      final boatNumber = _boatNumberController.text.trim();
+      final boatType = _boatTypeController.text.trim();
+      final boatRegistrationNumber = _registrationNumberController.text.trim();
+
+      final success = await authService.registerBoatAndFisherman(
         email: _emailController.text.trim(),
         password: _passwordController.text,
-        firstName: _firstNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
+        firstName: firstName,
+        lastName: lastName,
+        middleName: middleName.isNotEmpty ? middleName : null,
         phone: _phoneController.text.trim(),
-        userType: _selectedUserType,
+        boatName: boatNumber.isNotEmpty ? boatNumber : 'Boat-${DateTime.now().millisecondsSinceEpoch}',
+        boatType: boatType,
+        boatRegistrationNumber: boatRegistrationNumber,
+        boatCapacity: '0',
+        address: _addressController.text.trim().isNotEmpty ? _addressController.text.trim() : null,
+        fishingArea: _fishingAreaController.text.trim().isNotEmpty ? _fishingAreaController.text.trim() : null,
+        emergencyContactPerson: _emergencyContactController.text.trim().isNotEmpty ? _emergencyContactController.text.trim() : null,
       );
       
       if (mounted) {
@@ -66,12 +93,18 @@ class _UsersRegistrationPageSimpleState extends State<UsersRegistrationPageSimpl
           
           // Clear form
           _firstNameController.clear();
+          _middleNameController.clear();
           _lastNameController.clear();
           _emailController.clear();
           _phoneController.clear();
           _passwordController.clear();
           _confirmPasswordController.clear();
-          setState(() => _selectedUserType = 'fisherman');
+          _addressController.clear();
+          _fishingAreaController.clear();
+          _emergencyContactController.clear();
+          _boatNumberController.clear();
+          _boatTypeController.clear();
+          _registrationNumberController.clear();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Registration failed. Please try again.')),
@@ -123,31 +156,6 @@ class _UsersRegistrationPageSimpleState extends State<UsersRegistrationPageSimpl
                     ),
                     const SizedBox(height: 24),
                     
-                    // User Type Selection
-                    const Text(
-                      'User Type',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedUserType,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'fisherman', child: Text('Fisherman')),
-                        DropdownMenuItem(value: 'coastguard', child: Text('Coast Guard')),
-                      ],
-                      onChanged: (value) {
-                        setState(() => _selectedUserType = value!);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    
                     // First Name
                     CustomTextField(
                       controller: _firstNameController,
@@ -159,6 +167,14 @@ class _UsersRegistrationPageSimpleState extends State<UsersRegistrationPageSimpl
                         }
                         return null;
                       },
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Middle Name
+                    CustomTextField(
+                      controller: _middleNameController,
+                      label: 'Middle Name',
+                      hint: 'Enter middle name (optional)',
                     ),
                     const SizedBox(height: 16),
                     
@@ -245,6 +261,72 @@ class _UsersRegistrationPageSimpleState extends State<UsersRegistrationPageSimpl
                         }
                         return null;
                       },
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Address
+                    CustomTextField(
+                      controller: _addressController,
+                      label: 'Address',
+                      hint: 'Enter address',
+                      keyboardType: TextInputType.streetAddress,
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Fishing Area
+                    CustomTextField(
+                      controller: _fishingAreaController,
+                      label: 'Fishing Area',
+                      hint: 'Enter fishing area',
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Emergency Contact Person
+                    CustomTextField(
+                      controller: _emergencyContactController,
+                      label: 'Emergency Contact Person',
+                      hint: 'Enter emergency contact person',
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Boat Information Section
+                    const Text(
+                      'Boat Information',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF13294B),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Boat Number
+                    CustomTextField(
+                      controller: _boatNumberController,
+                      label: 'Boat Number',
+                      hint: 'Enter boat number',
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Boat Type and Registration Number
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CustomTextField(
+                            controller: _boatTypeController,
+                            label: 'Boat Type',
+                            hint: 'Enter boat type',
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: CustomTextField(
+                            controller: _registrationNumberController,
+                            label: 'Registration Number',
+                            hint: 'Enter registration number',
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 24),
                     

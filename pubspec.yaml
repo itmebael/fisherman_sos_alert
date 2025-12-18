@@ -46,7 +46,7 @@ dependencies:
   image_picker: ^1.1.1
 
   # Charts
-  fl_chart: ^1.0.0
+  fl_chart: ^0.66.0
 
   # Date formatting
   intl: ^0.19.0
@@ -55,9 +55,23 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
   assets:
     - assets/img/logo.png
     - assets/img/coastguard.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  web:
+    generate: true
+    image_path: "assets/img/logo.png"
+    background_color: "#ffffff"
+    theme_color: "#0175C2"
+  image_path: "assets/img/logo.png"
+  adaptive_icon_background: "#ffffff"
+  adaptive_icon_foreground: "assets/img/logo.png"
+  remove_alpha_ios: true

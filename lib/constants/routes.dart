@@ -19,7 +19,6 @@ import '../screens/admin/register_page.dart';
 import '../screens/admin/users_registration_page_simple.dart';
 import '../screens/admin/boat_registration_page_simple.dart';
 import '../screens/admin/device_management_page.dart';
-import '../screens/admin/weather_report_map_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -43,8 +42,6 @@ class AppRoutes {
   static const String usersRegistration = '/usersRegistration';
   static const String boatRegistration = '/boatRegistration';
   static const String deviceManagement = '/device-management';
-  static const String weatherReportMap = '/weather-report-map';
-
   static Map<String, WidgetBuilder> routes = {
     splash: (context) => const SplashScreen(),
     login: (context) => const LoginScreen(),
@@ -60,12 +57,14 @@ class AppRoutes {
     userManagement: (context) => const UserManagementPage(),
     rescueNotifications: (context) => const RescueNotificationsPage(),
     navigation: (context) => const NavigationPage(),
-    adminMap: (context) => const AdminMapScreen(),
+    adminMap: (context) {
+      final arguments = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      return AdminMapScreen.fromRouteArguments(arguments);
+    },
     reports: (context) => const ReportsPage(),
     register: (context) => const RegisterPage(),
     usersRegistration: (context) => const UsersRegistrationPageSimple(),
     boatRegistration: (context) => const BoatRegistrationPageSimple(),
     deviceManagement: (context) => const DeviceManagementPage(),
-    weatherReportMap: (context) => const WeatherReportMapScreen(),
   };
 }

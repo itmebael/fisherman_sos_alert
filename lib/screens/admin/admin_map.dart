@@ -8,7 +8,28 @@ import '../../services/live_location_service.dart';
 import 'admin_drawer.dart';
 
 class AdminMapScreen extends StatefulWidget {
-  const AdminMapScreen({super.key});
+  final String? alertId; // Optional alert ID to highlight
+  final double? initialLatitude; // Optional initial latitude
+  final double? initialLongitude; // Optional initial longitude
+  
+  const AdminMapScreen({
+    super.key,
+    this.alertId,
+    this.initialLatitude,
+    this.initialLongitude,
+  });
+  
+  // Factory constructor to create from route arguments
+  factory AdminMapScreen.fromRouteArguments(Map<String, dynamic>? arguments) {
+    if (arguments == null) {
+      return const AdminMapScreen();
+    }
+    return AdminMapScreen(
+      alertId: arguments['alertId']?.toString(),
+      initialLatitude: (arguments['latitude'] as num?)?.toDouble(),
+      initialLongitude: (arguments['longitude'] as num?)?.toDouble(),
+    );
+  }
 
   @override
   State<AdminMapScreen> createState() => _AdminMapScreenState();
@@ -21,6 +42,10 @@ class _AdminMapScreenState extends State<AdminMapScreen> {
   @override
   void initState() {
     super.initState();
+    // If initial coordinates are provided, set them as searched location
+    if (widget.initialLatitude != null && widget.initialLongitude != null) {
+      _searchedLocation = latlong.LatLng(widget.initialLatitude!, widget.initialLongitude!);
+    }
     // Ensure boundaries table exists before using admin features
     BoundaryService.createBoundariesTable();
     // Start live location tracking for admin view (if admin is a fisherman)
@@ -136,6 +161,97 @@ class _AdminMapScreenState extends State<AdminMapScreen> {
                 ),
 
                 const SizedBox(height: 12),
+                // Map Legend
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // SOS Alert Marker Legend
+                      Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.red.withValues(alpha: 0.3),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.warning,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'SOS Alert',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Search Marker Legend
+                      Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.orange.withValues(alpha: 0.5),
+                                  blurRadius: 6,
+                                  spreadRadius: 1.5,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.location_on,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Search',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
@@ -151,7 +267,9 @@ class _AdminMapScreenState extends State<AdminMapScreen> {
                         ],
                       ),
                       child: MapWidgetSimple(
-                        searchedLocation: _searchedLocation,
+                        searchedLocation: _searchedLocation ?? (widget.initialLatitude != null && widget.initialLongitude != null 
+                          ? latlong.LatLng(widget.initialLatitude!, widget.initialLongitude!)
+                          : null),
                       ),
                     ),
                   ),

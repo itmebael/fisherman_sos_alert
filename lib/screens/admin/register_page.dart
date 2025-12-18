@@ -274,7 +274,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   // App Title
                   const Expanded(
                     child: Text(
-                      'Salbar_Mangirisda',
+                      'Salbar Mangirisda',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,

@@ -10,7 +10,7 @@ class BantayDagatApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Salbar_Mangirisda',
+      title: 'Salbar Mangirisda',
       theme: ThemeData(
         primarySwatch: AppColors.primarySwatch,
         fontFamily: 'Roboto',

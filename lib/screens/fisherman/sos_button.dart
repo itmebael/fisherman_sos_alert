@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../services/weather_service.dart';
 
 class SOSButton extends StatefulWidget {
   const SOSButton({super.key});
@@ -167,6 +168,24 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
 
       print('SOS alert completed successfully');
 
+      // Fetch weather data for the alert location
+      Map<String, dynamic>? weatherData;
+      try {
+        final weatherService = WeatherService();
+        weatherData = await weatherService.getWeatherByCoordinates(
+          position.latitude, 
+          position.longitude,
+        );
+        if (weatherData != null) {
+          print('Weather data fetched for SOS alert: $weatherData');
+        } else {
+          print('⚠️ Weather data not available for this location');
+        }
+      } catch (e) {
+        print('⚠️ Error fetching weather data: $e');
+        // Continue without weather data - alert creation should not fail due to weather
+      }
+
       // Prepare SOS alert data - include user data if available, otherwise use defaults
       // Add null safety checks to prevent NoSuchMethodError
       final sosAlertData = {
@@ -194,6 +213,7 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
         'fisherman_emergency_contact_person': user?.emergencyContactPerson ?? 'Not provided',
         'fisherman_profile_picture_url': user?.profileImageUrl,
         'fisherman_profile_image_url': user?.profileImageUrl,
+        if (weatherData != null) 'weather_data': weatherData,
       };
 
       print('SOS Alert data prepared:');

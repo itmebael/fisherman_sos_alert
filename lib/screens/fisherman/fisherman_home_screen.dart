@@ -189,7 +189,7 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
                       const SOSButton(),
                       SizedBox(height: screenHeight * 0.03),
                       const Text(
-                        'Press the SOS button in case of emergency.\nThis will immediately alert the Salbar_Mangirisda Coast Guard.',
+                        'Press the SOS button in case of emergency.\nThis will immediately alert the Salbar Mangirisda Coast Guard.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 16,

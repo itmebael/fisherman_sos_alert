@@ -33,8 +33,10 @@ class _ReportsPageState extends State<ReportsPage> {
     });
     try {
       final data = await _databaseService.getRescueReports();
+      // Enrich reports with boat information
+      final enrichedData = await _enrichReportsWithBoatInfo(data);
       setState(() {
-        _reports = data;
+        _reports = enrichedData;
         _loading = false;
       });
     } catch (e) {
@@ -43,6 +45,65 @@ class _ReportsPageState extends State<ReportsPage> {
         _loading = false;
       });
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _enrichReportsWithBoatInfo(List<Map<String, dynamic>> reports) async {
+    final enrichedReports = <Map<String, dynamic>>[];
+    
+    for (var report in reports) {
+      final enrichedReport = Map<String, dynamic>.from(report);
+      final fishermanUid = report['fisherman_uid']?.toString();
+      
+      if (fishermanUid != null && fishermanUid.isNotEmpty) {
+        try {
+          // Fetch boat information for this fisherman
+          final boats = await _databaseService.getBoatsByOwnerId(fishermanUid);
+          if (boats.isNotEmpty) {
+            final boat = boats.first;
+            // Get boat name or registration number
+            enrichedReport['boat_name'] = boat['name'] ?? 
+                                         boat['registration_number'] ?? 
+                                         boat['registrationNumber'] ??
+                                         boat['id'] ?? 
+                                         '-';
+          } else {
+            enrichedReport['boat_name'] = '-';
+          }
+        } catch (e) {
+          print('Error fetching boat info for fisherman $fishermanUid: $e');
+          enrichedReport['boat_name'] = '-';
+        }
+      } else {
+        enrichedReport['boat_name'] = '-';
+      }
+      
+      enrichedReports.add(enrichedReport);
+    }
+    
+    return enrichedReports;
+  }
+
+  String _buildWeatherTooltip(Map<String, dynamic> report) {
+    final weatherDetails = report['weatherDetails'] as Map<String, dynamic>?;
+    if (weatherDetails == null || weatherDetails.isEmpty) {
+      return report['weather']?.toString() ?? 'No weather data';
+    }
+    
+    final parts = <String>[];
+    if (weatherDetails['temperature'] != null) {
+      parts.add('Temp: ${weatherDetails['temperature']}°C');
+    }
+    if (weatherDetails['description'] != null) {
+      parts.add('Condition: ${weatherDetails['description']}');
+    }
+    if (weatherDetails['humidity'] != null) {
+      parts.add('Humidity: ${weatherDetails['humidity']}%');
+    }
+    if (weatherDetails['windSpeed'] != null) {
+      parts.add('Wind: ${weatherDetails['windSpeed']} m/s');
+    }
+    
+    return parts.isEmpty ? (report['weather']?.toString() ?? 'No weather data') : parts.join('\n');
   }
 
   String _buildPrintableText() {
@@ -60,9 +121,38 @@ class _ReportsPageState extends State<ReportsPage> {
       buffer.writeln('ID: ${r['id']}');
       buffer.writeln('Full Name: ${r['fullName'] ?? '-'}');
       buffer.writeln('Status: ${r['status'] ?? '-'}');
+      buffer.writeln('Boat Name: ${r['boat_name'] ?? '-'}');
       buffer.writeln('Distress Time: ${r['distressTime'] ?? '-'}');
       buffer.writeln('Rescue Time: ${r['rescueTime'] ?? '-'}');
-      buffer.writeln('Date: ${(r['distressTime'] ?? '-').toString().split('T').first}');
+      final distressDate = (r['distressTime'] ?? '-').toString();
+      final dateStr = distressDate.contains('T') ? distressDate.split('T').first : distressDate.split(' ').first;
+      buffer.writeln('Date: $dateStr');
+      
+      // Enhanced weather display
+      buffer.writeln('Weather Conditions on ${dateStr}:');
+      final weatherDetails = r['weatherDetails'] as Map<String, dynamic>?;
+      if (weatherDetails != null && weatherDetails.isNotEmpty) {
+        if (weatherDetails['temperature'] != null) {
+          buffer.writeln('  Temperature: ${weatherDetails['temperature']}°C');
+        }
+        if (weatherDetails['description'] != null) {
+          buffer.writeln('  Condition: ${weatherDetails['description']}');
+        }
+        if (weatherDetails['humidity'] != null) {
+          buffer.writeln('  Humidity: ${weatherDetails['humidity']}%');
+        }
+        if (weatherDetails['windSpeed'] != null) {
+          buffer.writeln('  Wind Speed: ${weatherDetails['windSpeed']} m/s');
+        }
+        if (weatherDetails['pressure'] != null) {
+          buffer.writeln('  Pressure: ${weatherDetails['pressure']} hPa');
+        }
+      } else {
+        buffer.writeln('  ${r['weather'] ?? 'No weather data available'}');
+      }
+      
+      buffer.writeln('Casualties: ${r['casualties'] ?? 0}');
+      buffer.writeln('Injured: ${r['injured'] ?? 0}');
       buffer.writeln('');
       buffer.writeln('-' * 70);
       buffer.writeln('');
@@ -148,55 +238,62 @@ class _ReportsPageState extends State<ReportsPage> {
     );
   }
 
-  Future<void> _showPrintDialog() async {
-    final text = _buildPrintableText();
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Print / Export'),
-        content: SizedBox(
-          width: 600,
-          child: SingleChildScrollView(
-            child: SelectableText(text),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          TextButton(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: text));
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Copied to clipboard')),
-                );
-              }
-            },
-            child: const Text('Copy'),
-          ),
-        ],
-      ),
-    );
-  }
 
   String _buildCsv() {
     final buffer = StringBuffer();
-    buffer.writeln('ID,Full Name,Status,Distress Time,Rescue Time');
+    buffer.writeln('ID,Full Name,Status,Boat Name,Date,Distress Time,Rescue Time,Temperature,Weather Condition,Humidity,Wind Speed,Pressure,Casualties,Injured');
     for (final r in _reports) {
       final id = (r['id'] ?? '').toString().replaceAll(',', ' ');
       final name = (r['fullName'] ?? '').toString().replaceAll(',', ' ');
       final status = (r['status'] ?? '').toString().replaceAll(',', ' ');
+      final boatName = (r['boat_name'] ?? '-').toString().replaceAll(',', ' ');
       final distress = (r['distressTime'] ?? '').toString().replaceAll(',', ' ');
-      final rescue = (r['rescueTime'] ?? '').toString().replaceAll(',', ' ');
-      buffer.writeln('$id,$name,$status,$distress,$rescue');
+      final distressDate = distress.contains('T') ? distress.split('T').first : distress.split(' ').first;
+      final rescue = (r['rescueTime'] ?? '-').toString().replaceAll(',', ' ');
+      
+      // Extract weather details
+      final weatherDetails = r['weatherDetails'] as Map<String, dynamic>?;
+      final temp = weatherDetails?['temperature']?.toString() ?? '-';
+      final condition = weatherDetails?['description']?.toString().replaceAll(',', ' ') ?? (r['weather'] ?? '-').toString().replaceAll(',', ' ');
+      final humidity = weatherDetails?['humidity']?.toString() ?? '-';
+      final windSpeed = weatherDetails?['windSpeed']?.toString() ?? '-';
+      final pressure = weatherDetails?['pressure']?.toString() ?? '-';
+      
+      final casualties = (r['casualties'] ?? 0).toString();
+      final injured = (r['injured'] ?? 0).toString();
+      buffer.writeln('$id,$name,$status,$boatName,$distressDate,$distress,$rescue,$temp,$condition,$humidity,$windSpeed,$pressure,$casualties,$injured');
     }
     return buffer.toString();
   }
 
   Future<void> _exportCsv() async {
     if (_reports.isEmpty) return;
+    
+    // Show confirmation dialog before downloading
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Download Excel Report'),
+        content: const Text('Are you sure you want to download the rescue reports as CSV/Excel file?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Download'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed != true) return;
+    
     final csv = _buildCsv();
     final saver = getCsvSaver();
     final result = await saver.saveCsv(filename: 'rescue_reports.csv', csvContent: csv);
@@ -237,7 +334,7 @@ class _ReportsPageState extends State<ReportsPage> {
             const SizedBox(width: 16),
             // App title
             Text(
-              "Salbar_Mangirisda",
+              "Salbar Mangirisda",
               style: const TextStyle(
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,
@@ -262,23 +359,6 @@ class _ReportsPageState extends State<ReportsPage> {
             tooltip: 'Refresh',
             onPressed: _loadReports,
           ),
-          if (_reports.isNotEmpty) ...[
-            IconButton(
-              icon: const Icon(Icons.visibility, color: AppColors.textPrimary),
-              tooltip: 'View Report',
-              onPressed: _viewReport,
-            ),
-            IconButton(
-              icon: const Icon(Icons.download, color: AppColors.textPrimary),
-              tooltip: 'Download CSV',
-              onPressed: _exportCsv,
-            ),
-            IconButton(
-              icon: const Icon(Icons.print, color: AppColors.textPrimary),
-              tooltip: 'Print / Export',
-              onPressed: _showPrintDialog,
-            ),
-          ],
           const SizedBox(width: 8),
         ],
       ),
@@ -441,12 +521,13 @@ class _ReportsPageState extends State<ReportsPage> {
                                   ),
                                   child: const Row(
                                     children: [
-                                      Expanded(flex: 2, child: Center(child: Text('Profile', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 3, child: Center(child: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Profile', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Boat Name', style: TextStyle(fontWeight: FontWeight.bold)))),
                                       Expanded(flex: 2, child: Center(child: Text('Distress Time', style: TextStyle(fontWeight: FontWeight.bold)))),
                                       Expanded(flex: 2, child: Center(child: Text('Rescue Time', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Weather', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold)))),
                                     ],
                                   ),
                                 ),
@@ -476,30 +557,67 @@ class _ReportsPageState extends State<ReportsPage> {
                                                         children: [
                                                           // Profile picture
                                                           Expanded(
-                                                            flex: 2,
+                                                            flex: 1,
                                                             child: Center(
                                                               child: Container(
-                                                                width: 50,
-                                                                height: 50,
+                                                                width: 40,
+                                                                height: 40,
                                                                 decoration: BoxDecoration(
                                                                   color: Colors.blue.withOpacity(0.2),
-                                                                  borderRadius: BorderRadius.circular(25),
+                                                                  borderRadius: BorderRadius.circular(20),
                                                                 ),
                                                                 child: const Icon(
                                                                   Icons.person,
                                                                   color: Colors.blue,
-                                                                  size: 28,
+                                                                  size: 24,
                                                                 ),
                                                               ),
                                                             ),
                                                           ),
                                                           // Full Name
                                                           Expanded(
-                                                            flex: 3,
+                                                            flex: 2,
                                                             child: Center(
                                                               child: Text(
                                                                 (r['fullName'] ?? '-').toString(),
-                                                                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500, fontSize: 15),
+                                                                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500, fontSize: 13),
+                                                                textAlign: TextAlign.center,
+                                                                maxLines: 2,
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Boat Name
+                                                          Expanded(
+                                                            flex: 2,
+                                                            child: Center(
+                                                              child: Container(
+                                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                decoration: BoxDecoration(
+                                                                  color: Colors.blue.withOpacity(0.1),
+                                                                  borderRadius: BorderRadius.circular(8),
+                                                                  border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                                                                ),
+                                                                child: Row(
+                                                                  mainAxisSize: MainAxisSize.min,
+                                                                  children: [
+                                                                    const Icon(Icons.directions_boat, size: 14, color: Colors.blue),
+                                                                    const SizedBox(width: 4),
+                                                                    Flexible(
+                                                                      child: Text(
+                                                                        (r['boat_name'] ?? '-').toString(),
+                                                                        style: const TextStyle(
+                                                                          color: AppColors.textPrimary,
+                                                                          fontSize: 11,
+                                                                          fontWeight: FontWeight.w500,
+                                                                        ),
+                                                                        maxLines: 2,
+                                                                        overflow: TextOverflow.ellipsis,
+                                                                        textAlign: TextAlign.center,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ),
                                                               ),
                                                             ),
                                                           ),
@@ -508,8 +626,12 @@ class _ReportsPageState extends State<ReportsPage> {
                                                             flex: 2,
                                                             child: Center(
                                                               child: Text(
-                                                                (r['distressTime'] ?? '-').toString(),
-                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                                                                (r['distressTime'] ?? '-').toString().split('T').first + '\n' + 
+                                                                ((r['distressTime'] ?? '-').toString().contains('T') 
+                                                                  ? (r['distressTime'] ?? '-').toString().split('T')[1].substring(0, 5)
+                                                                  : ''),
+                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
+                                                                textAlign: TextAlign.center,
                                                               ),
                                                             ),
                                                           ),
@@ -518,40 +640,77 @@ class _ReportsPageState extends State<ReportsPage> {
                                                             flex: 2,
                                                             child: Center(
                                                               child: Text(
-                                                                (r['rescueTime'] ?? '-').toString(),
-                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                                                                r['rescueTime'] != null 
+                                                                  ? (r['rescueTime'].toString().split('T').first + '\n' + 
+                                                                     (r['rescueTime'].toString().contains('T') 
+                                                                       ? r['rescueTime'].toString().split('T')[1].substring(0, 5)
+                                                                       : ''))
+                                                                  : '-',
+                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
+                                                                textAlign: TextAlign.center,
                                                               ),
                                                             ),
                                                           ),
-                                                          // Date (from distressTime date-only)
+                                                          // Weather
                                                           Expanded(
                                                             flex: 2,
                                                             child: Center(
-                                                              child: Text(
-                                                                (r['distressTime'] ?? '-').toString().split('T').first,
-                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                                                              child: Tooltip(
+                                                                message: _buildWeatherTooltip(r),
+                                                                child: Container(
+                                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                  decoration: BoxDecoration(
+                                                                    color: Colors.blue.withOpacity(0.1),
+                                                                    borderRadius: BorderRadius.circular(8),
+                                                                    border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                                                                  ),
+                                                                  child: Row(
+                                                                    mainAxisSize: MainAxisSize.min,
+                                                                    children: [
+                                                                      const Icon(Icons.cloud, size: 14, color: Colors.blue),
+                                                                      const SizedBox(width: 4),
+                                                                      Flexible(
+                                                                        child: Text(
+                                                                          (r['weather'] ?? '-').toString(),
+                                                                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 10),
+                                                                          maxLines: 2,
+                                                                          overflow: TextOverflow.ellipsis,
+                                                                          textAlign: TextAlign.center,
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
                                                               ),
                                                             ),
                                                           ),
-                                                          // Action status
+                                                          // Status
                                                           Expanded(
-                                                            flex: 2,
+                                                            flex: 1,
                                                             child: Center(
                                                               child: Container(
-                                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                                                 decoration: BoxDecoration(
-                                                                  color: (r['status'] == 'resolved' ? Colors.green : Colors.red).withOpacity(0.1),
-                                                                  borderRadius: BorderRadius.circular(16),
-                                                                  border: Border.all(color: (r['status'] == 'resolved' ? Colors.green : Colors.red).withOpacity(0.3)),
+                                                                  color: (r['status'] == 'inactive' ? Colors.green : Colors.red).withOpacity(0.1),
+                                                                  borderRadius: BorderRadius.circular(12),
+                                                                  border: Border.all(color: (r['status'] == 'inactive' ? Colors.green : Colors.red).withOpacity(0.3)),
                                                                 ),
                                                                 child: Row(
                                                                   mainAxisSize: MainAxisSize.min,
                                                                   children: [
-                                                                    Icon(Icons.circle, color: r['status'] == 'resolved' ? Colors.green : Colors.red, size: 10),
-                                                                    const SizedBox(width: 6),
+                                                                    Icon(
+                                                                      r['status'] == 'inactive' ? Icons.check_circle : Icons.warning,
+                                                                      color: r['status'] == 'inactive' ? Colors.green : Colors.red,
+                                                                      size: 12,
+                                                                    ),
+                                                                    const SizedBox(width: 4),
                                                                     Text(
-                                                                      r['status'] == 'resolved' ? 'Rescued' : 'In Distress',
-                                                                      style: TextStyle(color: r['status'] == 'resolved' ? Colors.green : Colors.red, fontSize: 12, fontWeight: FontWeight.w600),
+                                                                      r['status'] == 'inactive' ? 'Rescued' : 'Active',
+                                                                      style: TextStyle(
+                                                                        color: r['status'] == 'inactive' ? Colors.green : Colors.red,
+                                                                        fontSize: 10,
+                                                                        fontWeight: FontWeight.w600,
+                                                                      ),
                                                                     ),
                                                                   ],
                                                                 ),
