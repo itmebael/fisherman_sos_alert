@@ -39,7 +39,6 @@ class NavigationPage extends StatelessWidget {
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,
                 fontSize: 22,
-                fontFamily: 'Montserrat',
               ),
             ),
           ],

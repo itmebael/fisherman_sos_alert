@@ -202,10 +202,7 @@ class _AdminDrawerState extends State<AdminDrawer> with TickerProviderStateMixin
                       ),
                     ),
                     onPressed: () {
-                      _animationController.reverse().then((_) {
-                        Provider.of<AuthProvider>(context, listen: false).logout();
-                        Navigator.pushReplacementNamed(context, AppRoutes.login);
-                      });
+                      _showLogoutConfirmation(context);
                     },
                   ),
                 ),
@@ -213,6 +210,58 @@ class _AdminDrawerState extends State<AdminDrawer> with TickerProviderStateMixin
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showLogoutConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: AppColors.errorColor),
+            SizedBox(width: 8),
+            Text('Confirm Logout'),
+          ],
+        ),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // Store root context before closing dialog
+              final rootContext = Navigator.of(context, rootNavigator: true).context;
+              
+              // Close the confirmation dialog
+              Navigator.of(context).pop();
+              
+              // Wait a moment for dialog to close
+              await Future.delayed(const Duration(milliseconds: 100));
+              
+              // Close drawer animation
+              await _animationController.reverse();
+              
+              // Perform logout
+              try {
+                await Provider.of<AuthProvider>(rootContext, listen: false).logout();
+              } catch (e) {
+                print('Logout error: $e');
+                // Continue with navigation even if logout has issues
+              }
+              
+              // Navigate to login screen
+              if (rootContext.mounted) {
+                Navigator.pushReplacementNamed(rootContext, AppRoutes.login);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.errorColor),
+            child: const Text('Logout', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

@@ -51,7 +51,6 @@ class _UsersPageState extends State<UsersPage> {
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,
                 fontSize: 22,
-                fontFamily: 'Montserrat',
               ),
             ),
           ],

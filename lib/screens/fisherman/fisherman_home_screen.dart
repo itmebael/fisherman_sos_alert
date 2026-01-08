@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../../constants/colors.dart';
 import '../../constants/strings.dart';
+import '../../constants/routes.dart';
 import 'sos_button.dart';
 import '../../services/global_notification_manager.dart';
 import '../../providers/auth_provider.dart';
@@ -16,7 +19,8 @@ class FishermanHomeScreen extends StatefulWidget {
 }
 
 class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
-  final GlobalNotificationManager _globalNotificationManager = GlobalNotificationManager();
+  final GlobalNotificationManager _globalNotificationManager =
+      GlobalNotificationManager();
 
   @override
   void initState() {
@@ -33,6 +37,7 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
     _globalNotificationManager.dispose();
     super.dispose();
   }
+
 
   Future<void> _makePhoneCall(String phoneNumber) async {
     final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
@@ -111,6 +116,8 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
+    final isMobile = screenWidth < 600;
+    final isTablet = screenWidth >= 600 && screenWidth < 900;
 
     return Scaffold(
       appBar: AppBar(
@@ -142,12 +149,20 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
               children: [
                 // Logo + App Name
                 Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: EdgeInsets.all(isMobile ? 16 : (isTablet ? 20 : 24)),
                   child: Column(
                     children: [
                       Container(
-                        width: screenWidth * 0.3,
-                        height: screenWidth * 0.3,
+                        width: isMobile
+                            ? screenWidth * 0.25
+                            : (isTablet
+                                  ? screenWidth * 0.2
+                                  : screenWidth * 0.15),
+                        height: isMobile
+                            ? screenWidth * 0.25
+                            : (isTablet
+                                  ? screenWidth * 0.2
+                                  : screenWidth * 0.15),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           boxShadow: [
@@ -165,14 +180,23 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(height: screenHeight * 0.02),
+                      SizedBox(
+                        height: isMobile
+                            ? screenHeight * 0.015
+                            : screenHeight * 0.02,
+                      ),
                       Text(
                         AppStrings.appName,
                         style: TextStyle(
-                          fontSize: screenWidth * 0.08, // scales with screen
+                          fontSize: isMobile
+                              ? screenWidth * 0.06
+                              : (isTablet
+                                    ? screenWidth * 0.05
+                                    : screenWidth * 0.04),
                           fontWeight: FontWeight.bold,
                           color: AppColors.primaryColor,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
@@ -181,33 +205,46 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
                 // SOS Button + Instructions
                 Padding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: screenWidth * 0.1,
-                    vertical: screenHeight * 0.05,
+                    horizontal: isMobile
+                        ? screenWidth * 0.05
+                        : (isTablet ? screenWidth * 0.08 : screenWidth * 0.1),
+                    vertical: isMobile
+                        ? screenHeight * 0.03
+                        : screenHeight * 0.05,
                   ),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const SOSButton(),
-                      SizedBox(height: screenHeight * 0.03),
-                      const Text(
+                      SizedBox(
+                        height: isMobile
+                            ? screenHeight * 0.02
+                            : screenHeight * 0.03,
+                      ),
+                      Text(
                         'Press the SOS button in case of emergency.\nThis will immediately alert the Salbar Mangirisda Coast Guard.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: isMobile ? 14 : (isTablet ? 15 : 16),
                           color: AppColors.textSecondary,
                           height: 1.5,
                         ),
                       ),
-                      SizedBox(height: screenHeight * 0.04),
+                      SizedBox(
+                        height: isMobile
+                            ? screenHeight * 0.02
+                            : screenHeight * 0.03,
+                      ),
                       // Call Coast Guard Button
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: _showCallDialog,
-                          icon: const Icon(Icons.phone, size: 24),
-                          label: const Text(
+                          icon: Icon(Icons.phone, size: isMobile ? 20 : 24),
+                          label: Text(
                             'Call Coast Guard',
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: isMobile ? 16 : (isTablet ? 17 : 18),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -215,8 +252,12 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
                             backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
                             padding: EdgeInsets.symmetric(
-                              vertical: screenHeight * 0.02,
-                              horizontal: screenWidth * 0.05,
+                              vertical: isMobile
+                                  ? screenHeight * 0.012
+                                  : screenHeight * 0.018,
+                              horizontal: isMobile
+                                  ? screenWidth * 0.04
+                                  : screenWidth * 0.05,
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -225,19 +266,27 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(height: screenHeight * 0.02),
-                      const Text(
+                      SizedBox(
+                        height: isMobile
+                            ? screenHeight * 0.012
+                            : screenHeight * 0.018,
+                      ),
+                      Text(
                         'Contact the Coast Guard directly for assistance.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 14,
+                          fontSize: isMobile ? 12 : 14,
                           color: AppColors.textSecondary,
                         ),
                       ),
-                      SizedBox(height: screenHeight * 0.02),
+                      SizedBox(
+                        height: isMobile
+                            ? screenHeight * 0.012
+                            : screenHeight * 0.018,
+                      ),
                       // Emergency Contact Number Display
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(isMobile ? 12 : 16),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(12),
@@ -246,39 +295,85 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
                             width: 1,
                           ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.phone,
-                              color: Colors.blue,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Emergency: ',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
+                        child: isMobile
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(
+                                        Icons.phone,
+                                        color: Colors.blue,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'Emergency: ',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  GestureDetector(
+                                    onTap: () => _makePhoneCall(
+                                      AppStrings.emergencyCallNumber,
+                                    ),
+                                    child: Text(
+                                      AppStrings.emergencyCallNumber,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.phone,
+                                    color: Colors.blue,
+                                    size: isTablet ? 18 : 20,
+                                  ),
+                                  SizedBox(width: isTablet ? 6 : 8),
+                                  const Text(
+                                    'Emergency: ',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => _makePhoneCall(
+                                      AppStrings.emergencyCallNumber,
+                                    ),
+                                    child: Text(
+                                      AppStrings.emergencyCallNumber,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            GestureDetector(
-                              onTap: () => _makePhoneCall(AppStrings.emergencyCallNumber),
-                              child: Text(
-                                AppStrings.emergencyCallNumber,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
-                      SizedBox(height: screenHeight * 0.05),
+                      SizedBox(
+                        height: isMobile
+                            ? screenHeight * 0.02
+                            : screenHeight * 0.03,
+                      ),
                     ],
                   ),
                 ),

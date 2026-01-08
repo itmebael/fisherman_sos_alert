@@ -452,7 +452,6 @@ class _WeatherReportMapScreenState extends State<WeatherReportMapScreen> {
                 color: Color(0xFF13294B),
                 fontWeight: FontWeight.bold,
                 fontSize: 22,
-                fontFamily: 'Montserrat',
               ),
             ),
           ],
@@ -640,7 +639,7 @@ class _WeatherReportMapScreenState extends State<WeatherReportMapScreen> {
                                 ),
                                 children: [
                                   TileLayer(
-                                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                                     userAgentPackageName: 'com.example.fisherman_sos_alert',
                                     maxZoom: 19,
                                   ),

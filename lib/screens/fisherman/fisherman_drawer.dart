@@ -15,7 +15,8 @@ class FishermanDrawer extends StatefulWidget {
 }
 
 class _FishermanDrawerState extends State<FishermanDrawer> {
-  final FishermanNotificationService _notificationService = FishermanNotificationService();
+  final FishermanNotificationService _notificationService =
+      FishermanNotificationService();
   int _unreadCount = 0;
   StreamSubscription? _notificationCountSubscription;
 
@@ -35,7 +36,7 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
   Future<void> _loadUnreadCount() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final currentUser = auth.currentUser;
-    
+
     if (currentUser == null) return;
 
     final count = await _notificationService.getUnreadNotificationsCount(
@@ -54,7 +55,7 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final currentUser = auth.currentUser;
-      
+
       if (currentUser == null) return;
 
       _notificationCountSubscription = _notificationService
@@ -63,13 +64,15 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
             fishermanEmail: currentUser.email,
           )
           .listen((notifications) {
-        if (!mounted) return;
-        
-        final unreadCount = notifications.where((n) => !(n['isRead'] as bool? ?? false)).length;
-        setState(() {
-          _unreadCount = unreadCount;
-        });
-      });
+            if (!mounted) return;
+
+            final unreadCount = notifications
+                .where((n) => !(n['isRead'] as bool? ?? false))
+                .length;
+            setState(() {
+              _unreadCount = unreadCount;
+            });
+          });
     });
   }
 
@@ -86,17 +89,17 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
           child: Column(
             children: [
               Container(
-                height: 100,
                 width: double.infinity,
                 color: AppColors.drawerColor,
-                child: const SafeArea(
+                child: SafeArea(
                   child: Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        SizedBox(height: 8),
-                        Text(
+                        const SizedBox(height: 8),
+                        const Text(
                           AppStrings.welcome,
                           style: TextStyle(
                             color: AppColors.whiteColor,
@@ -104,6 +107,7 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
@@ -113,7 +117,10 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
               // Menu Header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 child: const Text(
                   'Menu',
                   style: TextStyle(
@@ -171,7 +178,10 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
               // Account Section Header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
                 child: const Text(
                   'Account',
                   style: TextStyle(
@@ -199,23 +209,68 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
                   icon: const Icon(Icons.logout, size: 20),
                   label: const Text(
                     "Logout",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
-                  onPressed: () async {
-                    await Provider.of<AuthProvider>(context, listen: false).logout();
-
-                    if (context.mounted) {
-                      Navigator.pushReplacementNamed(context, AppRoutes.login);
-                    }
+                  onPressed: () {
+                    _showLogoutConfirmation(context);
                   },
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showLogoutConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.logout, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Confirm Logout'),
+          ],
+        ),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // Store root context before closing dialog
+              final rootContext = Navigator.of(context, rootNavigator: true).context;
+              
+              // Close the dialog first
+              Navigator.of(context).pop();
+              
+              // Wait a moment for dialog to close
+              await Future.delayed(const Duration(milliseconds: 100));
+              
+              // Perform logout
+              try {
+                await Provider.of<AuthProvider>(
+                  rootContext,
+                  listen: false,
+                ).logout();
+              } catch (e) {
+                print('Logout error: $e');
+                // Continue with navigation even if logout has issues
+              }
+
+              // Navigate to login screen
+              if (rootContext.mounted) {
+                Navigator.pushReplacementNamed(rootContext, AppRoutes.login);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Logout', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
@@ -239,11 +294,7 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
             color: AppColors.whiteColor.withOpacity(0.2),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(
-            icon,
-            color: AppColors.whiteColor,
-            size: 18,
-          ),
+          child: Icon(icon, color: AppColors.whiteColor, size: 18),
         ),
         title: Text(
           title,
@@ -288,11 +339,7 @@ class _FishermanDrawerState extends State<FishermanDrawer> {
                 color: AppColors.whiteColor.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                icon,
-                color: AppColors.whiteColor,
-                size: 18,
-              ),
+              child: Icon(icon, color: AppColors.whiteColor, size: 18),
             ),
             if (badgeCount > 0)
               Positioned(

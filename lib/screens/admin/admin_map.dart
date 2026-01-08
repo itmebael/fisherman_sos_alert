@@ -60,13 +60,6 @@ class _AdminMapScreenState extends State<AdminMapScreen> {
     super.dispose();
   }
 
-  Future<void> _startLiveTracking() async {
-    try {
-      await _liveLocationService.startTracking();
-    } catch (e) {
-      print('Error starting live location tracking: $e');
-    }
-  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -93,189 +86,465 @@ class _AdminMapScreenState extends State<AdminMapScreen> {
         height: double.infinity,
         color: AppColors.homeBackground,
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Maritime Monitoring System',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Monitor fishermen locations and rescue operations',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // ✅ Add Three Buttons
-                Row(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final screenWidth = constraints.maxWidth;
+              final isMobile = screenWidth < 600;
+              final padding = isMobile ? 12.0 : 16.0;
+              
+              return Padding(
+                padding: EdgeInsets.all(padding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryColor,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () => _showInteractiveBoundaryDialog(context),
-                        icon: const Icon(Icons.touch_app, color: Colors.white),
-                        label: const Text("Click Map", style: TextStyle(color: Colors.white, fontSize: 12)),
+                    Text(
+                      'Maritime Monitoring System',
+                      style: TextStyle(
+                        fontSize: isMobile ? 16 : 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: () => _showBoundaryDialog(context),
-                        icon: const Icon(Icons.border_all, color: Colors.white),
-                        label: const Text("Manual Entry", style: TextStyle(color: Colors.white, fontSize: 12)),
+                    SizedBox(height: isMobile ? 6 : 8),
+                    Text(
+                      'Monitor fishermen locations and rescue operations',
+                      style: TextStyle(
+                        fontSize: isMobile ? 11 : 12,
+                        color: AppColors.textSecondary,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    SizedBox(height: isMobile ? 10 : 12),
+
+                    // ✅ Add Three Buttons - Stack on mobile
+                    isMobile
+                        ? Column(
+                            children: [
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryColor,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => _showInteractiveBoundaryDialog(context),
+                                  icon: const Icon(Icons.touch_app, color: Colors.white, size: 18),
+                                  label: const Text("Click Map", style: TextStyle(color: Colors.white, fontSize: 13)),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => _showBoundaryDialog(context),
+                                  icon: const Icon(Icons.border_all, color: Colors.white, size: 18),
+                                  label: const Text("Manual Entry", style: TextStyle(color: Colors.white, fontSize: 13)),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.indigo,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => _showManualLatLngDialog(context),
+                                  icon: const Icon(Icons.location_searching, color: Colors.white, size: 18),
+                                  label: const Text("Search", style: TextStyle(color: Colors.white, fontSize: 13)),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryColor,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => _showInteractiveBoundaryDialog(context),
+                                  icon: const Icon(Icons.touch_app, color: Colors.white),
+                                  label: const Text("Click Map", style: TextStyle(color: Colors.white, fontSize: 12)),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => _showBoundaryDialog(context),
+                                  icon: const Icon(Icons.border_all, color: Colors.white),
+                                  label: const Text("Manual Entry", style: TextStyle(color: Colors.white, fontSize: 12)),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.indigo,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  onPressed: () => _showManualLatLngDialog(context),
+                                  icon: const Icon(Icons.location_searching, color: Colors.white),
+                                  label: const Text("Search", style: TextStyle(color: Colors.white, fontSize: 12)),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                    SizedBox(height: isMobile ? 10 : 12),
+                    // Map Legend - Stack on mobile
+                    Container(
+                      padding: EdgeInsets.all(isMobile ? 10 : 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: isMobile
+                          ? Column(
+                              children: [
+                                // SOS Alert Marker Legend
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.red.withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.warning,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'SOS Alert',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                // Search Marker Legend
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.orange.withValues(alpha: 0.5),
+                                            blurRadius: 6,
+                                            spreadRadius: 1.5,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.location_on,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Search',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                // Live Location Marker Legend
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.blue.withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.person_pin_circle,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Live Location',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                // Offline Marker Legend
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.grey.withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.person_pin_circle,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Offline (>5m ago)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                // SOS Alert Marker Legend
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.red.withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.warning,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'SOS Alert',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Search Marker Legend
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.orange.withValues(alpha: 0.5),
+                                            blurRadius: 6,
+                                            spreadRadius: 1.5,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.location_on,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Search',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Live Location Marker Legend
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.blue.withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.person_pin_circle,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Live Location',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Offline Marker Legend
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.grey.withValues(alpha: 0.3),
+                                            blurRadius: 4,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.person_pin_circle,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Offline',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                    ),
+                    SizedBox(height: isMobile ? 10 : 12),
                     Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: MapWidgetSimple(
+                            searchedLocation: _searchedLocation ?? (widget.initialLatitude != null && widget.initialLongitude != null 
+                              ? latlong.LatLng(widget.initialLatitude!, widget.initialLongitude!)
+                              : null),
+                          ),
                         ),
-                        onPressed: () => _showManualLatLngDialog(context),
-                        icon: const Icon(Icons.location_searching, color: Colors.white),
-                        label: const Text("Search", style: TextStyle(color: Colors.white, fontSize: 12)),
                       ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 12),
-                // Map Legend
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // SOS Alert Marker Legend
-                      Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.red.withValues(alpha: 0.3),
-                                  blurRadius: 4,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.warning,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'SOS Alert',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      // Search Marker Legend
-                      Row(
-                        children: [
-                          Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: Colors.orange,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 3),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.orange.withValues(alpha: 0.5),
-                                  blurRadius: 6,
-                                  spreadRadius: 1.5,
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.location_on,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Search',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: MapWidgetSimple(
-                        searchedLocation: _searchedLocation ?? (widget.initialLatitude != null && widget.initialLongitude != null 
-                          ? latlong.LatLng(widget.initialLatitude!, widget.initialLongitude!)
-                          : null),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

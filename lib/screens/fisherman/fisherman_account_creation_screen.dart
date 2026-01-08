@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../constants/colors.dart';
+import '../../constants/routes.dart';
 import '../../services/auth_service.dart';
 import '../../services/image_upload_service.dart';
 import '../../utils/validators.dart';
@@ -189,18 +190,39 @@ class _FishermanAccountCreationScreenState extends State<FishermanAccountCreatio
       
       if (mounted) {
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Account created successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
+          // Check if user is logged in (auto-login should have happened)
+          final authService = AuthService();
+          final currentUser = authService.currentUser;
           
-          // Navigate back to login or home after a short delay
-          await Future.delayed(const Duration(milliseconds: 500));
-          if (mounted) {
-            Navigator.of(context).pop();
+          if (currentUser != null) {
+            // User is logged in, navigate to home
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Account created successfully! Logging you in...'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+            
+            await Future.delayed(const Duration(milliseconds: 500));
+            if (mounted) {
+              // Navigate to fisherman home
+              Navigator.pushReplacementNamed(context, AppRoutes.fishermanHome);
+            }
+          } else {
+            // Auto-login failed, show message and go back to login
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Account created successfully! Please login.'),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            );
+            
+            await Future.delayed(const Duration(milliseconds: 500));
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
           }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(

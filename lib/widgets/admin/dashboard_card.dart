@@ -31,7 +31,6 @@ class _DashboardCardState extends State<DashboardCard> with SingleTickerProvider
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _elevationAnimation;
-  final bool _isHovered = false;
 
   @override
   void initState() {

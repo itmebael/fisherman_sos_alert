@@ -134,7 +134,7 @@ class _DeviceManagementPageState extends State<DeviceManagementPage> {
                           },
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           value: _filterDeviceType,

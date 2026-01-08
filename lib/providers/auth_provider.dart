@@ -82,18 +82,31 @@ class AuthProvider with ChangeNotifier {
   Future<void> logout() async {
     try {
       _setLoading(true);
+      notifyListeners(); // Notify immediately to show loading state
 
+      // Perform logout
       await _authService.logout();
+      
+      // Clear all user data
       _currentUser = null;
       _supabaseUser = null;
       _isAuthenticated = false;
       _clearError();
 
       _setLoading(false);
-      notifyListeners();
+      notifyListeners(); // Notify after logout completes
+      
+      print('AuthProvider: Logout completed successfully');
     } catch (e) {
+      print('AuthProvider: Logout error: $e');
       _setLoading(false);
       _setError(e.toString());
+      notifyListeners();
+      
+      // Still clear local state even if logout had errors
+      _currentUser = null;
+      _supabaseUser = null;
+      _isAuthenticated = false;
     }
   }
 

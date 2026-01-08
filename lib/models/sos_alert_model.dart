@@ -7,6 +7,8 @@ class SOSAlertModel {
   final String status;
   final DateTime createdAt;
   final DateTime? resolvedAt;
+  final int casualties;
+  final int injured;
 
   SOSAlertModel({
     required this.id,
@@ -17,6 +19,8 @@ class SOSAlertModel {
     this.status = 'active',
     required this.createdAt,
     this.resolvedAt,
+    this.casualties = 0,
+    this.injured = 0,
   });
 
   factory SOSAlertModel.fromJson(Map<String, dynamic> json) {
@@ -29,6 +33,8 @@ class SOSAlertModel {
       status: json['status'] ?? 'active',
       createdAt: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
       resolvedAt: json['resolved_at'] != null ? DateTime.parse(json['resolved_at']) : null,
+      casualties: json['casualties'] ?? 0,
+      injured: json['injured'] ?? 0,
     );
   }
 
@@ -42,6 +48,8 @@ class SOSAlertModel {
       'status': status,
       'created_at': createdAt.toIso8601String(),
       'resolved_at': resolvedAt?.toIso8601String(),
+      'casualties': casualties,
+      'injured': injured,
     };
   }
 
@@ -54,6 +62,8 @@ class SOSAlertModel {
     String? status,
     DateTime? createdAt,
     DateTime? resolvedAt,
+    int? casualties,
+    int? injured,
   }) {
     return SOSAlertModel(
       id: id ?? this.id,
@@ -64,6 +74,8 @@ class SOSAlertModel {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       resolvedAt: resolvedAt ?? this.resolvedAt,
+      casualties: casualties ?? this.casualties,
+      injured: injured ?? this.injured,
     );
   }
 }

@@ -17,7 +17,6 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
   final Set<String> _knownAlertIds = <String>{};
   bool _isMapLoaded = false;
   bool _hasConnectionError = false;
-  final bool _useAltTiles = true; // default to OSM tiles to avoid ArcGIS DNS issues
 
   // Fishing boundary coordinates (rectangle)
   final List<LatLng> _fishingBoundary = [
@@ -338,7 +337,7 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
           children: [
             // Try multiple tile providers for better reliability
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
               userAgentPackageName: 'com.example.fisherman_sos_alert',
               maxZoom: 19,
               // Keep simple; avoid subdomain warnings and DNS failures

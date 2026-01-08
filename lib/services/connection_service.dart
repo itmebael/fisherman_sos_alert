@@ -112,9 +112,59 @@ class ConnectionService {
         } else {
           rethrow;
         }
+      } on StorageException catch (e) {
+        print('Storage error: ${e.message}');
+        print('Error status code: ${e.statusCode}');
+        // Don't retry on RLS policy violations (403) - these are policy issues
+        if (e.statusCode == 403 || e.message.contains('row-level security')) {
+          print('RLS policy violation - not retrying');
+          rethrow;
+        }
+        // Retry on other storage errors (network issues, etc.)
+        attempts++;
+        if (attempts < maxRetries) {
+          await Future.delayed(Duration(seconds: 2 * attempts));
+        } else {
+          rethrow;
+        }
+      } on AuthException catch (e) {
+        print('Auth error: ${e.message}');
+        print('Error status code: ${e.statusCode}');
+        // Don't retry on "user already exists" errors - these won't succeed on retry
+        if (e.statusCode == 422 && (e.message.contains('already registered') || e.message.contains('user_already_exists'))) {
+          print('User already exists - not retrying');
+          rethrow;
+        }
+        // Retry on other auth errors (network issues, etc.)
+        attempts++;
+        if (attempts < maxRetries) {
+          await Future.delayed(Duration(seconds: 2 * attempts));
+        } else {
+          rethrow;
+        }
       } catch (e) {
         print('Unexpected error (attempt ${attempts + 1}/$maxRetries): $e');
         print('Error type: ${e.runtimeType}');
+        
+        // Check for non-retryable errors by message/type even if not caught by specific handlers
+        final errorString = e.toString().toLowerCase();
+        
+        // Don't retry on RLS policy violations
+        if (errorString.contains('row-level security') || 
+            errorString.contains('rls') ||
+            (errorString.contains('403') && errorString.contains('unauthorized'))) {
+          print('RLS policy violation detected - not retrying');
+          rethrow;
+        }
+        
+        // Don't retry on "user already exists" errors
+        if (errorString.contains('user already registered') || 
+            errorString.contains('user_already_exists') ||
+            (errorString.contains('422') && errorString.contains('already'))) {
+          print('User already exists error detected - not retrying');
+          rethrow;
+        }
+        
         _isConnected = false;
         attempts++;
         if (attempts < maxRetries) {

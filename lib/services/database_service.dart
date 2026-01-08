@@ -1,12 +1,15 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
+import 'package:uuid/uuid.dart';
 import '../supabase_config.dart';
 import 'connection_service.dart';
 import 'weather_service.dart';
+import '../data/local/shared_preferences_helper.dart';
 
 class DatabaseService {
   final SupabaseClient _supabase = SupabaseConfig.client;
   final ConnectionService _connectionService = ConnectionService();
+  static const _uuid = Uuid();
 
   // Test database connection
   Future<bool> testConnection() async {
@@ -223,7 +226,7 @@ class DatabaseService {
           final response = await _supabase
               .from('sos_alerts')
               .select('*')
-              .eq('status', 'active')
+              .inFilter('status', ['active', 'on_the_way'])
               .order('created_at', ascending: false);
 
           print('✅ Active SOS alerts fetched: ${response.length} records');
@@ -245,16 +248,16 @@ class DatabaseService {
   }
 
   // Get all SOS alerts (all statuses)
-  Future<List<Map<String, dynamic>>> getAllSOSAlerts() async {
+  Future<List<Map<String, dynamic>>> getAllSOSAlerts({int limit = 100}) async {
     try {
-      print('=== FETCHING ALL SOS ALERTS ===');
+      print('=== FETCHING ALL SOS ALERTS (Limit: $limit) ===');
       return await _connectionService.executeWithRetry(() async {
         try {
           final response = await _supabase
               .from('sos_alerts')
               .select('*')
               .order('created_at', ascending: false)
-              .limit(100);
+              .limit(limit);
 
           print('✅ All SOS alerts fetched: ${response.length} records');
           return List<Map<String, dynamic>>.from(response);
@@ -274,12 +277,32 @@ class DatabaseService {
     }
   }
 
-  // Get stream of SOS alerts for real-time updates
+  // Get stream of SOS alerts for real-time updates (Active & On The Way)
   Stream<List<Map<String, dynamic>>> getSOSAlertsStream() {
+    print('DEBUG: Initializing SOS Stream');
     return _supabase
         .from('sos_alerts')
         .stream(primaryKey: ['id'])
-        .eq('status', 'active')
+        .order('created_at', ascending: false)
+        .map((events) => events
+            .where((event) => 
+                event['status'] == 'active' || 
+                event['status'] == 'on_the_way')
+            .toList())
+        .handleError((error) {
+          print('DEBUG: SOS Stream Error: $error');
+          if (error.toString().contains('permission') || error.toString().contains('42501')) {
+            print('DEBUG: PERMISSION DENIED for SOS Alerts stream. Check RLS policies.');
+          }
+        });
+  }
+
+  // Get stream of specific fisherman's SOS alerts
+  Stream<List<Map<String, dynamic>>> getFishermanSOSStream(String fishermanId) {
+    return _supabase
+        .from('sos_alerts')
+        .stream(primaryKey: ['id'])
+        .eq('fisherman_uid', fishermanId)
         .order('created_at', ascending: false);
   }
 
@@ -479,8 +502,7 @@ class DatabaseService {
           final response = await _supabase
               .from('coastguards')
               .select('*')
-              .eq('is_active', true)
-              .order('last_active', ascending: false);
+              .eq('is_active', true);
 
           print('✅ Coastguards/Admins fetched: ${response.length} records');
           return List<Map<String, dynamic>>.from(response);
@@ -503,10 +525,39 @@ class DatabaseService {
           .from('coastguards')
           .stream(primaryKey: ['id'])
           .eq('is_active', true)
-          .order('last_active', ascending: false);
+          .order('id'); // Explicit order to avoid implicit order by missing column
     } catch (e) {
       print('Error creating coastguards stream: $e');
       return Stream.value([]);
+    }
+  }
+
+  Future<bool> updateCoastguardCurrentLocation({
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      final user = await SharedPreferencesHelper.getUserData();
+      final userId = user?.id;
+      final userEmail = user?.email;
+      return await _connectionService.executeWithRetry(() async {
+        var query = _supabase.from('coastguards').update({
+          'current_latitude': latitude,
+          'current_longitude': longitude,
+          // 'last_active': DateTime.now().toIso8601String(),
+          'is_active': true,
+        });
+        if (userId != null && userId.isNotEmpty) {
+          query = query.eq('id', userId);
+        } else if (userEmail != null && userEmail.isNotEmpty) {
+          query = query.eq('email', userEmail);
+        }
+        await query;
+        return true;
+      });
+    } catch (e) {
+      print('Error updating coastguard location: $e');
+      return false;
     }
   }
 
@@ -752,6 +803,17 @@ class DatabaseService {
       final adminName = currentUser?.userMetadata?['name'] ?? 
                        currentUser?.userMetadata?['full_name'] ??
                        'Coast Guard';
+      Map<String, dynamic>? adminRow;
+      try {
+        var adminQuery = _supabase
+            .from('coastguards')
+            .select('current_latitude,current_longitude,name,email');
+        if (currentUser?.id != null && currentUser!.id.isNotEmpty) {
+          adminRow = await adminQuery.eq('id', currentUser.id).maybeSingle();
+        } else {
+          adminRow = await adminQuery.eq('email', adminEmail).maybeSingle();
+        }
+      } catch (_) {}
 
       // Determine notification type, title, and message
       String notificationType;
@@ -804,6 +866,16 @@ class DatabaseService {
         title = 'SOS Alert Status Update';
         message = '$adminName has updated your SOS alert status to "$status".';
         notificationData['updated_at'] = DateTime.now().toIso8601String();
+      }
+
+      if (adminRow != null &&
+          adminRow['current_latitude'] != null &&
+          adminRow['current_longitude'] != null) {
+        notificationData['admin_location'] = {
+          'latitude': adminRow['current_latitude'],
+          'longitude': adminRow['current_longitude'],
+          'admin_name': adminName,
+        };
       }
 
       // Prepare notification data for insertion
@@ -1203,8 +1275,77 @@ class DatabaseService {
           .select('id, status, created_at, resolved_at, fisherman_uid, fisherman_name, fisherman_email, weather_data, casualties, injured')
           .order('created_at', ascending: false);
 
+      final reports = List<Map<String, dynamic>>.from(response);
+
+      // Collect unique fisherman UIDs to fetch boat names efficiently
+      final fishermanUids = reports
+          .map((r) => r['fisherman_uid'] as String?)
+          .where((uid) => uid != null && uid.isNotEmpty)
+          .toSet()
+          .toList();
+
+      // Fetch boat names from fishermen table
+      Map<String, String> boatNames = {};
+      if (fishermanUids.isNotEmpty) {
+        try {
+          final fishermenData = await _supabase
+              .from('fishermen')
+              .select('id, boat_name, boat_registration_number')
+              .inFilter('id', fishermanUids);
+
+          for (final f in fishermenData) {
+            if (f['id'] != null) {
+              String? name = f['boat_name']?.toString();
+              // Fallback to registration number if boat name is missing
+              if (name == null || name.isEmpty) {
+                name = f['boat_registration_number']?.toString();
+              }
+              
+              if (name != null && name.isNotEmpty) {
+                boatNames[f['id'].toString()] = name;
+              }
+            }
+          }
+
+          // Fallback: Check 'boats' table for fishermen who didn't have boat info in 'fishermen' table
+          final missingBoatUids = fishermanUids
+              .where((uid) => !boatNames.containsKey(uid))
+              .toList();
+
+          if (missingBoatUids.isNotEmpty) {
+            final boatsData = await _supabase
+                .from('boats')
+                .select('owner_id, name, registration_number')
+                .eq('is_active', true)
+                .inFilter('owner_id', missingBoatUids);
+
+            for (final b in boatsData) {
+              final ownerId = b['owner_id']?.toString();
+              if (ownerId != null && !boatNames.containsKey(ownerId)) {
+                String? name = b['name']?.toString();
+                if (name == null || name.isEmpty) {
+                  name = b['registration_number']?.toString();
+                }
+                
+                if (name != null && name.isNotEmpty) {
+                  boatNames[ownerId] = name;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          print('Error fetching boat names in getRescueReports: $e');
+        }
+      }
+
       // Normalize shape for UI
-      return List<Map<String, dynamic>>.from(response).map((row) {
+      return reports.map((row) {
+        final fishermanUid = row['fisherman_uid']?.toString();
+        // Use fetched boat name or default to null (will be handled by UI or enrichment)
+        final boatName = (fishermanUid != null && boatNames.containsKey(fishermanUid)) 
+            ? boatNames[fishermanUid] 
+            : null;
+
         final nameFromAlert = (row['fisherman_name']?.toString() ?? '').trim();
         final emailFromAlert = (row['fisherman_email']?.toString() ?? '').trim();
         final fullName = nameFromAlert.isNotEmpty ? nameFromAlert : (emailFromAlert.isNotEmpty ? emailFromAlert : 'Unknown');
@@ -1272,7 +1413,8 @@ class DatabaseService {
           'id': row['id'],
           'status': row['status'],
           'fullName': fullName,
-          'fisherman_uid': row['fisherman_uid'],
+          'fisherman_uid': fishermanUid,
+          'boat_name': boatName, // Add boat_name here
           'distressTime': row['created_at'],
           'rescueTime': row['resolved_at'],
           'weather': weatherInfo,
@@ -1307,6 +1449,8 @@ class DatabaseService {
         
         // Create a combined record for each fisherman
         final fishermanWithBoat = Map<String, dynamic>.from(fisherman);
+        fishermanWithBoat['user_id'] = fisherman['id']; // Add user_id for compatibility
+        fishermanWithBoat['boat_id'] = boats.isNotEmpty ? boats.first['id'] : null; // Add boat_id for compatibility
         fishermanWithBoat['boat'] = boats.isNotEmpty ? boats.first : null;
         fishermanWithBoat['boats'] = boats; // Include all boats for this fisherman
         fishermenWithBoats.add(fishermanWithBoat);
@@ -1485,7 +1629,7 @@ class DatabaseService {
       // First, try to find existing boat
       final existingBoat = await getBoatByOwnerId(ownerId);
       
-      final boatId = existingBoat?['id'] ?? 'boat_${DateTime.now().millisecondsSinceEpoch}';
+      final boatId = existingBoat?['id'] ?? _uuid.v4();
       final boatName = boatData['boat_number'] ?? boatData['name'] ?? existingBoat?['name'] ?? 'Boat-$boatId';
       final boatType = boatData['boat_type'] ?? boatData['type'] ?? existingBoat?['type'] ?? '';
       final boatRegistrationNumber = boatData['registration_number'] ?? existingBoat?['registration_number'] ?? '';
@@ -1537,9 +1681,35 @@ class DatabaseService {
   // Delete fisherman
   Future<bool> deleteFisherman(String fishermanId) async {
     try {
+      if (fishermanId.isEmpty) {
+        print('Error: Fisherman ID is empty');
+        return false;
+      }
+
+      // Hard delete - actually remove from database
+      // First, get all boats owned by this fisherman
+      final boats = await _supabase
+          .from('boats')
+          .select('id')
+          .eq('owner_id', fishermanId);
+      
+      // Delete all boats owned by this fisherman
+      if (boats.isNotEmpty) {
+        for (var boat in boats) {
+          final boatId = boat['id']?.toString();
+          if (boatId != null && boatId.isNotEmpty) {
+            await _supabase
+                .from('boats')
+                .delete()
+                .eq('id', boatId);
+          }
+        }
+      }
+      
+      // Delete the fisherman
       await _supabase
           .from('fishermen')
-          .update({'is_active': false})
+          .delete()
           .eq('id', fishermanId);
       
       return true;
@@ -1552,14 +1722,52 @@ class DatabaseService {
   // Delete boat
   Future<bool> deleteBoat(String boatId) async {
     try {
+      if (boatId.isEmpty) {
+        print('Error: Boat ID is empty');
+        return false;
+      }
+
+      // Hard delete - actually remove from database
       await _supabase
           .from('boats')
-          .update({'is_active': false})
+          .delete()
           .eq('id', boatId);
       
       return true;
     } catch (e) {
       print('Error deleting boat: $e');
+      return false;
+    }
+  }
+
+  // Hard delete fisherman (actually remove from database)
+  Future<bool> hardDeleteFisherman(String fishermanId) async {
+    try {
+      // First, get all boats owned by this fisherman
+      final boats = await _supabase
+          .from('boats')
+          .select('id')
+          .eq('owner_id', fishermanId);
+      
+      // Delete all boats owned by this fisherman
+      if (boats.isNotEmpty) {
+        for (var boat in boats) {
+          await _supabase
+              .from('boats')
+              .delete()
+              .eq('id', boat['id']);
+        }
+      }
+      
+      // Delete the fisherman
+      await _supabase
+          .from('fishermen')
+          .delete()
+          .eq('id', fishermanId);
+      
+      return true;
+    } catch (e) {
+      print('Error hard deleting fisherman: $e');
       return false;
     }
   }
@@ -1643,8 +1851,7 @@ class DatabaseService {
 
   // Generate a proper UUID v4 using Supabase RPC or client-side helper
   String _generateUUID() {
-    return _supabase.auth.currentUser?.id ??
-        'uuid_${DateTime.now().millisecondsSinceEpoch}';
+    return _supabase.auth.currentUser?.id ?? _uuid.v4();
   }
 
   // Test SOS alert creation with sample data

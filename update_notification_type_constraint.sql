@@ -24,3 +24,8 @@ COMMENT ON CONSTRAINT fisherman_notifications_type_check ON public.fisherman_not
 
 
 
+
+
+
+
+

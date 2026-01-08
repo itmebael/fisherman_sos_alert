@@ -13,3 +13,8 @@ COMMENT ON COLUMN public.sos_alerts.injured IS 'Number of injured persons in thi
 
 
 
+
+
+
+
+

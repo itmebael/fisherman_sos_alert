@@ -233,12 +233,10 @@ class AuthService {
           // (insert might succeed but response might fail due to network)
           print('Insert error occurred, checking if account exists: $insertError');
           
-          if (userId != null) {
-            final accountExists = await _checkAccountExists(userId, email.trim(), userType);
-            if (accountExists) {
-              print('Account exists despite insert error - registration succeeded');
-              return true;
-            }
+          final accountExists = await _checkAccountExists(userId!, email.trim(), userType);
+          if (accountExists) {
+            print('Account exists despite insert error - registration succeeded');
+            return true;
           }
           
           // If account doesn't exist, check if email is already registered
@@ -271,20 +269,39 @@ class AuthService {
         }
 
         // Verify account was created successfully (even if insert seemed to succeed)
-        if (userId != null && insertSucceeded) {
+        if (insertSucceeded) {
           try {
-            final accountExists = await _checkAccountExists(userId, email.trim(), userType);
+            final accountExists = await _checkAccountExists(userId!, email.trim(), userType);
             if (accountExists) {
+              // Auto-login after successful registration
+              try {
+                await _autoLoginAfterRegistration(email.trim(), password);
+              } catch (loginError) {
+                print('Auto-login failed after registration: $loginError');
+                // Don't fail registration if auto-login fails - user can login manually
+              }
               return true;
             }
           } catch (e) {
             // If verification fails but insert succeeded, assume success
             // The account was inserted, verification is just a safety check
             print('Verification check failed but insert succeeded - assuming success: $e');
+            // Try auto-login anyway
+            try {
+              await _autoLoginAfterRegistration(email.trim(), password);
+            } catch (loginError) {
+              print('Auto-login failed after registration: $loginError');
+            }
             return true;
           }
         }
 
+        // Auto-login after successful registration
+        try {
+          await _autoLoginAfterRegistration(email.trim(), password);
+        } catch (loginError) {
+          print('Auto-login failed after registration: $loginError');
+        }
         return true;
       }
 
@@ -519,8 +536,8 @@ class AuthService {
           if (fishingArea != null && fishingArea.isNotEmpty) 'fishing_area': fishingArea,
           if (emergencyContactPerson != null && emergencyContactPerson.isNotEmpty) 'emergency_contact_person': emergencyContactPerson,
           // Boat information (denormalized)
-          if (boatId != null) 'boat_id': boatId,
-          'boat_name': boatName.isNotEmpty ? boatName : (boatId != null ? 'Boat-$boatId' : null),
+          'boat_id': boatId,
+          'boat_name': boatName.isNotEmpty ? boatName : 'Boat-$boatId',
           'boat_type': boatType.isNotEmpty ? boatType : null,
           'boat_registration_number': boatRegistrationNumber.isNotEmpty ? boatRegistrationNumber : null,
           'boat_capacity': int.tryParse(boatCapacity) ?? null,
@@ -546,12 +563,10 @@ class AuthService {
           // If insert fails, ALWAYS check if account was actually created
           print('Fisherman insert error occurred, checking if account exists: $insertError');
           
-          if (userId != null) {
-            final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
-            if (accountExists) {
-              print('Account exists despite insert error - registration succeeded');
-              return true;
-            }
+          final accountExists = await _checkAccountExists(userId!, email.trim(), 'fisherman');
+          if (accountExists) {
+            print('Account exists despite insert error - registration succeeded');
+            return true;
           }
           
           // If account doesn't exist, check if email is already registered
@@ -577,9 +592,9 @@ class AuthService {
         }
 
         // Verify account was created successfully
-        if (userId != null && insertSucceeded) {
+        if (insertSucceeded) {
           try {
-            final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
+            final accountExists = await _checkAccountExists(userId!, email.trim(), 'fisherman');
             if (accountExists) {
               return true;
             }
@@ -755,9 +770,17 @@ class AuthService {
   // Logout
   Future<void> logout() async {
     try {
+      print('Starting logout process...');
+      
       // Sign out from Supabase (if logged in via Supabase)
       try {
-        await _supabase.auth.signOut();
+        await _supabase.auth.signOut().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            print('Supabase sign out timeout - continuing with local cleanup');
+          },
+        );
+        print('Supabase sign out successful');
       } catch (e) {
         // Ignore if not logged in via Supabase (e.g., hardcoded admin)
         print('Supabase sign out note: $e');
@@ -767,14 +790,23 @@ class AuthService {
       _currentUser = null;
       
       // Clear saved user data and login status from SharedPreferences
-      await SharedPreferencesHelper.clearUserData();
+      try {
+        await SharedPreferencesHelper.clearUserData();
+        print('SharedPreferences cleared');
+      } catch (e) {
+        print('Error clearing SharedPreferences: $e');
+      }
       
       print('User logged out successfully - session cleared');
     } catch (e) {
       print('Error during logout: $e');
       // Still try to clear local data even if Supabase logout fails
       _currentUser = null;
-      await SharedPreferencesHelper.clearUserData();
+      try {
+        await SharedPreferencesHelper.clearUserData();
+      } catch (clearError) {
+        print('Error clearing data during logout error handling: $clearError');
+      }
     }
   }
 
@@ -871,6 +903,39 @@ class AuthService {
       } else {
         throw _getAuthErrorMessage(errorMessage);
       }
+    }
+  }
+
+  // Auto-login after successful registration
+  Future<void> _autoLoginAfterRegistration(String email, String password) async {
+    try {
+      print('Auto-logging in user after registration...');
+      // Wait a brief moment to ensure account is fully created
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Attempt to login with the credentials
+      AuthResponse? response;
+      try {
+        response = await _supabase.auth.signInWithPassword(
+          email: email.trim(),
+          password: password,
+        ).timeout(
+          const Duration(seconds: 10),
+        );
+      } on TimeoutException {
+        print('Auto-login timeout - user can login manually');
+        return;
+      }
+
+      if (response.user != null) {
+        await _fetchUserData(response.user!.id);
+        print('Auto-login successful after registration');
+      } else {
+        print('Auto-login failed - no user returned');
+      }
+    } catch (e) {
+      print('Auto-login failed after registration: $e');
+      // Don't throw - registration succeeded, user can login manually
     }
   }
 

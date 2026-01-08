@@ -60,7 +60,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
     try {
       final firstName = _firstNameController.text.trim();
-      final middleName = _middleNameController.text.trim();
       final lastName = _lastNameController.text.trim();
       final email = _emailController.text.trim();
       final password = _passwordController.text;
@@ -279,7 +278,6 @@ class _RegisterPageState extends State<RegisterPage> {
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF13294B),
-                        fontFamily: 'Montserrat',
                       ),
                     ),
                   ),

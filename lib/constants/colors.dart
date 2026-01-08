@@ -28,10 +28,10 @@ class AppColors {
   static const Color cardShadow = Color(0xFFE2E8F0);
   
   // Alert Colors
-  static const Color sosButtonColor = Color(0xFFEF4444); // Modern Red
-  static const Color warningColor = Color(0xFFF59E0B); // Amber
-  static const Color successColor = Color(0xFF10B981); // Emerald
-  static const Color errorColor = Color(0xFFEF4444); // Red
+  static const Color sosButtonColor = Color(0xFFB91C1C); // Darker Red (700)
+  static const Color warningColor = Color(0xFFB45309); // Darker Amber (700)
+  static const Color successColor = Color(0xFF047857); // Darker Emerald (700)
+  static const Color errorColor = Color(0xFFB91C1C); // Darker Red (700)
   
   // Text Colors
   static const Color textPrimary = Color(0xFF0F172A); // Dark Slate

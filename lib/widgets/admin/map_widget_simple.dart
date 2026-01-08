@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as latlong;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../../services/database_service.dart';
 import '../../services/boundary_service.dart';
 import '../../services/location_service.dart';
@@ -12,10 +14,11 @@ import 'dart:async';
 class MapWidgetSimple extends StatefulWidget {
   final bool showBoundaries;
   final bool showSOSAlerts;
-  final bool showAdminLocations; // Show admin/coastguard locations with green markers
+  final bool
+  showAdminLocations; // Show admin/coastguard locations with green markers
   final Function(bool)? onBoundaryCheck;
   final latlong.LatLng? searchedLocation;
-  
+
   const MapWidgetSimple({
     super.key,
     this.showBoundaries = false,
@@ -43,6 +46,10 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
   StreamSubscription? _adminLocationsSubscription;
   List<Map<String, dynamic>> _liveFishermenLocations = [];
   StreamSubscription? _liveLocationsSubscription;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final Map<String, Timer> _alertRepeatTimers = {};
+  final Set<String> _dismissedAlertIds = <String>{};
+  final Set<String> _activeAlertDialogs = <String>{};
 
   @override
   void initState() {
@@ -88,33 +95,311 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     }
   }
 
+  // Play SOS alert sound when new alert is received
+  Future<void> _playSOSAlertSound() async {
+    print('=== SOS ALERT SOUND TRIGGERED ===');
+
+    try {
+      // Also add vibration for physical feedback
+      HapticFeedback.heavyImpact();
+
+      // Play the SOS alert sound
+      await _audioPlayer.play(AssetSource('sounds/sosalert.mp3'));
+      print('SOS alert sound played successfully');
+
+      print('=== SOS ALERT SOUND COMPLETE ===');
+    } catch (e) {
+      print('Error playing SOS alert sound: $e');
+      // Fallback to vibration if audio fails
+      try {
+        HapticFeedback.vibrate();
+        print('Fallback vibration triggered');
+      } catch (e2) {
+        print('Fallback vibration error: $e2');
+      }
+    }
+  }
+  void _startAlertReminder(String alertId, Map<String, dynamic> alert, double lat, double lng, String name) {
+    if (_alertRepeatTimers.containsKey(alertId)) return;
+    _alertRepeatTimers[alertId] = Timer.periodic(const Duration(seconds: 10), (t) {
+      if (_dismissedAlertIds.contains(alertId)) {
+        t.cancel();
+        _alertRepeatTimers.remove(alertId);
+        return;
+      }
+      _playSOSAlertSound();
+      if (!_activeAlertDialogs.contains(alertId) && mounted) {
+        _showSOSAlertDialog(context, alert, lat, lng, name);
+      }
+    });
+  }
+
+  // Show popup dialog for new SOS alert
+  void _showSOSAlertDialog(
+    BuildContext context,
+    Map<String, dynamic> alert,
+    double lat,
+    double lng,
+    String name,
+  ) {
+    final alertId = alert['id']?.toString() ?? '';
+    final createdAt = alert['created_at']?.toString() ?? '';
+    final message = alert['message']?.toString() ?? 'Emergency SOS Alert';
+    final fishermanPhone =
+        alert['fisherman_phone']?.toString() ?? 'Not provided';
+    final boatName = alert['boat_name']?.toString() ?? 'Unknown';
+
+    // Parse and format the creation time
+    String timeDisplay = 'Just now';
+    try {
+      if (createdAt.isNotEmpty) {
+        final createdTime = DateTime.parse(createdAt);
+        final now = DateTime.now();
+        final difference = now.difference(createdTime);
+
+        if (difference.inSeconds < 60) {
+          timeDisplay = '${difference.inSeconds} seconds ago';
+        } else if (difference.inMinutes < 60) {
+          timeDisplay = '${difference.inMinutes} minutes ago';
+        } else {
+          timeDisplay = '${difference.inHours} hours ago';
+        }
+      }
+    } catch (e) {
+      print('Error parsing time: $e');
+    }
+
+    _activeAlertDialogs.add(alertId);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'NEW SOS ALERT',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red,
+                        ),
+                      ),
+                      Text(
+                        timeDisplay,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Fisherman Name
+                Row(
+                  children: [
+                    const Icon(Icons.person, color: Colors.blue, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Fisherman: $name',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Location
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.location_on, color: Colors.red, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Location:',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)}',
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Boat Name
+                if (boatName != 'Unknown')
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.directions_boat,
+                        color: Colors.green,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Boat: $boatName',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                if (boatName != 'Unknown') const SizedBox(height: 12),
+                // Phone
+                if (fishermanPhone != 'Not provided')
+                  Row(
+                    children: [
+                      const Icon(Icons.phone, color: Colors.orange, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Phone: $fishermanPhone',
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                if (fishermanPhone != 'Not provided')
+                  const SizedBox(height: 12),
+                // Message
+                if (message.isNotEmpty && message != 'Emergency SOS Alert')
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Message:',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(message, style: const TextStyle(fontSize: 14)),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _dismissedAlertIds.add(alertId);
+                final t = _alertRepeatTimers.remove(alertId);
+                t?.cancel();
+                Navigator.pop(context);
+              },
+              child: const Text('Dismiss'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                // Center map to alert location
+                if (_isMapReady) {
+                  _centerMapToLocation(latlong.LatLng(lat, lng));
+                }
+              },
+              icon: const Icon(Icons.map, size: 18),
+              label: const Text('View on Map'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
+    ).then((_) {
+      _activeAlertDialogs.remove(alertId);
+    });
+  }
+
   void _centerMapToLocation(latlong.LatLng location) {
     // Validate coordinates
-    if (location.latitude < -90 || location.latitude > 90 ||
-        location.longitude < -180 || location.longitude > 180) {
+    if (location.latitude < -90 ||
+        location.latitude > 90 ||
+        location.longitude < -180 ||
+        location.longitude > 180) {
       print('Invalid coordinates: ${location.latitude}, ${location.longitude}');
       return;
     }
 
     if (!_isMapReady) {
-      print('Map not ready yet, storing location for later: ${location.latitude}, ${location.longitude}');
+      print(
+        'Map not ready yet, storing location for later: ${location.latitude}, ${location.longitude}',
+      );
       _pendingCenterLocation = location;
       return;
     }
 
     print('Centering map to: ${location.latitude}, ${location.longitude}');
-    
+
     // Wait a bit longer to ensure tiles are loaded, then move
     Future.delayed(const Duration(milliseconds: 800), () {
       if (!mounted || !_isMapReady) {
         print('Map not mounted or not ready, skipping center');
         return;
       }
-      
+
       try {
         // Move map to location with zoom level 14
         _mapController.move(location, 14.0);
-        print('Successfully centered map to: ${location.latitude}, ${location.longitude}');
+        print(
+          'Successfully centered map to: ${location.latitude}, ${location.longitude}',
+        );
       } catch (e) {
         print('Error centering map: $e');
         // Retry after a longer delay
@@ -122,7 +407,9 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
           if (mounted && _isMapReady) {
             try {
               _mapController.move(location, 14.0);
-              print('Successfully centered map (retry): ${location.latitude}, ${location.longitude}');
+              print(
+                'Successfully centered map (retry): ${location.latitude}, ${location.longitude}',
+              );
             } catch (e2) {
               print('Error centering map (retry): $e2');
             }
@@ -156,7 +443,10 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     final position = await LocationService().getCurrentLocation();
     if (position != null) {
       setState(() {
-        _currentUserLatLng = latlong.LatLng(position.latitude, position.longitude);
+        _currentUserLatLng = latlong.LatLng(
+          position.latitude,
+          position.longitude,
+        );
       });
       // Center map to user only once on first acquire
       if (!_hasCenteredToUser) {
@@ -168,7 +458,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     // Listen to location updates with error handling
     // Cancel any existing subscription first
     _locationSubscription?.cancel();
-    
+
     _locationSubscription = LocationService().getLocationStream().listen(
       (pos) {
         if (!mounted) return;
@@ -194,35 +484,44 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     _locationSubscription?.cancel();
     _adminLocationsSubscription?.cancel();
     _liveLocationsSubscription?.cancel();
+    _audioPlayer.dispose();
+    for (final t in _alertRepeatTimers.values) {
+      t.cancel();
+    }
+    _alertRepeatTimers.clear();
+    _dismissedAlertIds.clear();
+    _activeAlertDialogs.clear();
     super.dispose();
   }
 
   void _startAdminLocationsStream() {
     // Cancel existing subscription if any
     _adminLocationsSubscription?.cancel();
-    
+
     // Start listening to admin/coastguard locations stream
-    _adminLocationsSubscription = DatabaseService().getCoastguardsStream().listen(
-      (admins) {
-        if (!mounted) return;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _adminLocations = admins;
+    _adminLocationsSubscription = DatabaseService()
+        .getCoastguardsStream()
+        .listen(
+          (admins) {
+            if (!mounted) return;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() {
+                  _adminLocations = admins;
+                });
+              }
             });
-          }
-        });
-      },
-      onError: (error) {
-        print('Admin locations stream error: $error');
-      },
-    );
+          },
+          onError: (error) {
+            print('Admin locations stream error: $error');
+          },
+        );
   }
 
   void _startLiveLocationsStream() {
     // Cancel existing subscription if any
     _liveLocationsSubscription?.cancel();
-    
+
     // Start listening to live fisherman locations stream
     _liveLocationsSubscription = DatabaseService().getLiveLocationsStream().listen(
       (locations) {
@@ -258,276 +557,286 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     try {
       // Only show SOS alerts if showSOSAlerts is true
       if (widget.showSOSAlerts) {
-      return StreamBuilder<List<Map<String, dynamic>>>(
-        stream: DatabaseService().getSOSAlertsStream(),
-        builder: (context, snapshot) {
-          final alerts = snapshot.data ?? [];
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: DatabaseService().getSOSAlertsStream(),
+          builder: (context, snapshot) {
+            final alerts = snapshot.data ?? [];
 
-          // Detect new alerts and notify with red alert + recenter
-          if (alerts.isNotEmpty) {
-            final currentIds = alerts.map((a) => a['id']?.toString() ?? '').where((id) => id.isNotEmpty).toSet();
-            final newIds = currentIds.difference(_knownAlertIds);
-            if (newIds.isNotEmpty) {
-              final latest = alerts.firstWhere((a) => newIds.contains(a['id'].toString()), orElse: () => alerts.first);
-              final lat = (latest['latitude'] as num).toDouble();
-              final lng = (latest['longitude'] as num).toDouble();
-              final name = latest['fishermen'] != null ? (latest['fishermen']['name']?.toString() ?? 'Unknown') : (latest['message']?.toString() ?? 'SOS Alert');
+            // Detect new alerts and notify with red alert + recenter
+            if (alerts.isNotEmpty) {
+              final currentIds = alerts
+                  .map((a) => a['id']?.toString() ?? '')
+                  .where((id) => id.isNotEmpty)
+                  .toSet();
+              final newIds = currentIds.difference(_knownAlertIds);
+              if (newIds.isNotEmpty) {
+                final latest = alerts.firstWhere(
+                  (a) => newIds.contains(a['id'].toString()),
+                  orElse: () => alerts.first,
+                );
+                final lat = (latest['latitude'] as num).toDouble();
+                final lng = (latest['longitude'] as num).toDouble();
+                final name = latest['fishermen'] != null
+                    ? (latest['fishermen']['name']?.toString() ?? 'Unknown')
+                    : (latest['message']?.toString() ?? 'SOS Alert');
 
-              // Only center if no searched location is active
-              if (_searchedLocation == null && _isMapReady) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _centerMapToLocation(latlong.LatLng(lat, lng));
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: Colors.red,
-                        content: Row(
-                          children: [
-                            const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text('SOS received from $name (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})')),
-                          ],
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 4),
-                      ),
-                    );
-                  }
-                });
-              } else {
-                // Just show notification without centering if searched location is active
+                // Play SOS alert sound when new alert is received
+                _playSOSAlertSound();
+
+                // Show popup dialog for new SOS alert
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: Colors.red,
-                        content: Row(
-                          children: [
-                            const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text('SOS received from $name (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})')),
-                          ],
-                        ),
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 4),
-                      ),
-                    );
+                    _showSOSAlertDialog(context, latest, lat, lng, name);
                   }
                 });
+                _startAlertReminder(
+                  latest['id']?.toString() ?? '',
+                  latest,
+                  lat,
+                  lng,
+                  name,
+                );
+
+                // Only center if no searched location is active
+                if (_searchedLocation == null && _isMapReady) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _centerMapToLocation(latlong.LatLng(lat, lng));
+                  });
+                }
+                _knownAlertIds.addAll(newIds);
               }
-              _knownAlertIds.addAll(newIds);
             }
-          }
 
-          // Check for fishermen outside boundaries
-          _checkFishermenOutsideBoundaries(alerts);
-          
-          // Check current user's boundary status if callback is provided
-          if (widget.onBoundaryCheck != null) {
-            _checkCurrentUserBoundaryStatus();
-          }
-        
-        // If showBoundaries is true, show boundary stream, otherwise show simple map
-        if (widget.showBoundaries) {
-          return StreamBuilder<List<Map<String, dynamic>>>(
-            stream: BoundaryService.getBoundariesStream(),
-            builder: (context, boundarySnapshot) {
-              final boundaries = boundarySnapshot.data ?? [];
-              
-              return Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  children: [
-                    FlutterMap(
-                      mapController: _mapController,
-                      options: MapOptions(
-                        // Always start with default center, then move if needed
-                        initialCenter: const latlong.LatLng(11.7753, 124.8861),
-                        initialZoom: 12.0,
-                        minZoom: 8.0,
-                        maxZoom: 18.0,
-                        onMapReady: _onMapReady,
-                        // Keep interaction enabled
-                        interactionOptions: const InteractionOptions(
-                          flags: InteractiveFlag.all,
+            // Check for fishermen outside boundaries
+            _checkFishermenOutsideBoundaries(alerts);
+
+            // Check current user's boundary status if callback is provided
+            if (widget.onBoundaryCheck != null) {
+              _checkCurrentUserBoundaryStatus();
+            }
+
+            // If showBoundaries is true, show boundary stream, otherwise show simple map
+            if (widget.showBoundaries) {
+              return StreamBuilder<List<Map<String, dynamic>>>(
+                stream: BoundaryService.getBoundariesStream(),
+                builder: (context, boundarySnapshot) {
+                  final boundaries = boundarySnapshot.data ?? [];
+
+                  return Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                          userAgentPackageName: 'com.example.fisherman_sos_alert',
-                          maxZoom: 18,
-                          errorTileCallback: (tile, error, stackTrace) {
-                            print('Tile loading error at ${tile.coordinates}: $error');
-                          },
-                        ),
-                        // Add boundary polygons only if showBoundaries is true
-                        if (widget.showBoundaries && boundaries.isNotEmpty)
-                          PolygonLayer(
-                            polygons: _buildBoundaryPolygons(boundaries),
-                          ),
-                        MarkerLayer(
-                          markers: _buildMarkers(alerts),
-                        ),
-                        // Live locations stream
-                        StreamBuilder<List<Map<String, dynamic>>>(
-                          stream: DatabaseService().getLiveLocationsStream(),
-                          builder: (context, liveLocationSnapshot) {
-                            final liveLocations = liveLocationSnapshot.data ?? [];
-                            return MarkerLayer(
-                              markers: _buildLiveLocationMarkers(liveLocations),
-                            );
-                          },
-                        ),
-                        if (_currentUserLatLng != null)
-                          MarkerLayer(
-                            markers: _buildUserMarkers(),
-                          ),
-                        if (_searchedLocation != null)
-                          MarkerLayer(
-                            markers: _buildSearchedLocationMarker(),
-                          ),
                       ],
                     ),
-                    // Map title overlay
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'Samar Waters Map',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Stack(
+                        children: [
+                          FlutterMap(
+                            mapController: _mapController,
+                            options: MapOptions(
+                              // Always start with default center, then move if needed
+                              initialCenter: const latlong.LatLng(
+                                11.7753,
+                                124.8861,
+                              ),
+                              initialZoom: 12.0,
+                              minZoom: 8.0,
+                              maxZoom: 18.0,
+                              onMapReady: _onMapReady,
+                              // Keep interaction enabled
+                              interactionOptions: const InteractionOptions(
+                                flags: InteractiveFlag.all,
+                              ),
+                            ),
+                            children: [
+                              TileLayer(
+                                urlTemplate:
+                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName:
+                                    'com.example.fisherman_sos_alert',
+                                maxZoom: 18,
+                                errorTileCallback: (tile, error, stackTrace) {
+                                  print(
+                                    'Tile loading error at ${tile.coordinates}: $error',
+                                  );
+                                },
+                              ),
+                              // Add boundary polygons only if showBoundaries is true
+                              if (widget.showBoundaries &&
+                                  boundaries.isNotEmpty)
+                                PolygonLayer(
+                                  polygons: _buildBoundaryPolygons(boundaries),
+                                ),
+                              MarkerLayer(markers: _buildMarkers(alerts)),
+                              // Live locations stream
+                              StreamBuilder<List<Map<String, dynamic>>>(
+                                stream: DatabaseService()
+                                    .getLiveLocationsStream(),
+                                builder: (context, liveLocationSnapshot) {
+                                  final liveLocations =
+                                      liveLocationSnapshot.data ?? [];
+                                  return MarkerLayer(
+                                    markers: _buildLiveLocationMarkers(
+                                      liveLocations,
+                                    ),
+                                  );
+                                },
+                              ),
+                              if (_currentUserLatLng != null)
+                                MarkerLayer(markers: _buildUserMarkers()),
+                              if (_searchedLocation != null)
+                                MarkerLayer(
+                                  markers: _buildSearchedLocationMarker(),
+                                ),
+                            ],
                           ),
-                        ),
+                          // Map title overlay
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Samar Waters Map',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
+                    ),
+                  );
+                },
+              );
+            } else {
+              // Simple map without boundaries
+              return Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-              ),
-            );
-          },
-        );
-        } else {
-          // Simple map without boundaries
-          return Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                children: [
-                  FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      // Always start with default center, then move if needed
-                      initialCenter: const latlong.LatLng(11.7753, 124.8861),
-                      initialZoom: 12.0,
-                      minZoom: 8.0,
-                      maxZoom: 18.0,
-                      onMapReady: _onMapReady,
-                      // Keep interaction enabled
-                      interactionOptions: const InteractionOptions(
-                        flags: InteractiveFlag.all,
-                      ),
-                    ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
                     children: [
-                      TileLayer(
-                        urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                        userAgentPackageName: 'com.example.fisherman_sos_alert',
-                        maxZoom: 18,
-                        errorTileCallback: (tile, error, stackTrace) {
-                          print('Tile loading error at ${tile.coordinates}: $error');
-                        },
+                      FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          // Always start with default center, then move if needed
+                          initialCenter: const latlong.LatLng(
+                            11.7753,
+                            124.8861,
+                          ),
+                          initialZoom: 12.0,
+                          minZoom: 8.0,
+                          maxZoom: 18.0,
+                          onMapReady: _onMapReady,
+                          // Keep interaction enabled
+                          interactionOptions: const InteractionOptions(
+                            flags: InteractiveFlag.all,
+                          ),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName:
+                                'com.example.fisherman_sos_alert',
+                            maxZoom: 18,
+                            errorTileCallback: (tile, error, stackTrace) {
+                              print(
+                                'Tile loading error at ${tile.coordinates}: $error',
+                              );
+                            },
+                          ),
+                          MarkerLayer(markers: _buildMarkers(alerts)),
+                          // Live locations stream
+                          StreamBuilder<List<Map<String, dynamic>>>(
+                            stream: DatabaseService().getLiveLocationsStream(),
+                            builder: (context, liveLocationSnapshot) {
+                              final liveLocations =
+                                  liveLocationSnapshot.data ?? [];
+                              return MarkerLayer(
+                                markers: _buildLiveLocationMarkers(
+                                  liveLocations,
+                                ),
+                              );
+                            },
+                          ),
+                          if (_currentUserLatLng != null)
+                            MarkerLayer(markers: _buildUserMarkers()),
+                          if (_searchedLocation != null)
+                            MarkerLayer(
+                              markers: _buildSearchedLocationMarker(),
+                            ),
+                          if (widget.showAdminLocations)
+                            MarkerLayer(markers: _buildAdminMarkers()),
+                          // Show active fishermen on admin map
+                          if (widget.showSOSAlerts &&
+                              _liveFishermenLocations.isNotEmpty)
+                            MarkerLayer(
+                              markers: _buildLiveLocationMarkers(
+                                _liveFishermenLocations,
+                              ),
+                            ),
+                        ],
                       ),
-                      MarkerLayer(
-                        markers: _buildMarkers(alerts),
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Samar Waters Map',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       ),
-                      // Live locations stream
-                      StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: DatabaseService().getLiveLocationsStream(),
-                        builder: (context, liveLocationSnapshot) {
-                          final liveLocations = liveLocationSnapshot.data ?? [];
-                          return MarkerLayer(
-                            markers: _buildLiveLocationMarkers(liveLocations),
-                          );
-                        },
-                      ),
-                      if (_currentUserLatLng != null)
-                        MarkerLayer(
-                          markers: _buildUserMarkers(),
-                        ),
-                      if (_searchedLocation != null)
-                        MarkerLayer(
-                          markers: _buildSearchedLocationMarker(),
-                        ),
-                      if (widget.showAdminLocations)
-                        MarkerLayer(
-                          markers: _buildAdminMarkers(),
-                        ),
-                      // Show active fishermen on admin map
-                      if (widget.showSOSAlerts && _liveFishermenLocations.isNotEmpty)
-                        MarkerLayer(
-                          markers: _buildLiveLocationMarkers(_liveFishermenLocations),
-                        ),
                     ],
                   ),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'Samar Waters Map',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-      },
-    );
-    } else {
-      // Simple map without SOS alerts - for fisherman view
-      return _buildSimpleMap();
-    }
+                ),
+              );
+            }
+          },
+        );
+      } else {
+        // Simple map without SOS alerts - for fisherman view
+        return _buildSimpleMap();
+      }
     } catch (e) {
       // Return a simple error widget if something goes wrong
       return Container(
@@ -559,173 +868,179 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       if (widget.onBoundaryCheck != null) {
         _checkCurrentUserBoundaryStatus();
       }
-    
-    // If showBoundaries is true, show boundary stream, otherwise show simple map
-    if (widget.showBoundaries) {
-      return StreamBuilder<List<Map<String, dynamic>>>(
-        stream: BoundaryService.getBoundariesStream(),
-        builder: (context, boundarySnapshot) {
-          final boundaries = boundarySnapshot.data ?? [];
-          
-          return Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Stack(
-                children: [
-                  FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: const latlong.LatLng(11.7753, 124.8861),
-                      initialZoom: 12.0,
-                      minZoom: 8.0,
-                      maxZoom: 18.0,
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                        userAgentPackageName: 'com.example.fisherman_sos_alert',
-                        maxZoom: 18,
-                      ),
-                      // Add boundary polygons only if showBoundaries is true
-                      if (widget.showBoundaries && boundaries.isNotEmpty)
-                        PolygonLayer(
-                          polygons: _buildBoundaryPolygons(boundaries),
-                        ),
-                      if (_currentUserLatLng != null)
-                        MarkerLayer(
-                          markers: _buildUserMarkers(),
-                        ),
-                      // Show active fishermen on fisherman map
-                      if (_liveFishermenLocations.isNotEmpty)
-                        MarkerLayer(
-                          markers: _buildLiveLocationMarkers(_liveFishermenLocations),
-                        ),
-                      // Show admin markers on fisherman map
-                      if (widget.showAdminLocations)
-                        MarkerLayer(
-                          markers: _buildAdminMarkers(),
-                        ),
-                    ],
-                  ),
-                  // Map title overlay
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.7),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'Samar Waters Map',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+
+      // If showBoundaries is true, show boundary stream, otherwise show simple map
+      if (widget.showBoundaries) {
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: BoundaryService.getBoundariesStream(),
+          builder: (context, boundarySnapshot) {
+            final boundaries = boundarySnapshot.data ?? [];
+
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-            ),
-          );
-        },
-      );
-    } else {
-      // Simple map without boundaries
-      return Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Stack(
-                children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  // Always start with default center, then move if needed
-                  initialCenter: const latlong.LatLng(11.7753, 124.8861),
-                  initialZoom: 12.0,
-                  minZoom: 8.0,
-                  maxZoom: 18.0,
-                  onMapReady: _onMapReady,
-                  // Keep interaction enabled
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.all,
-                  ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  children: [
+                    FlutterMap(
+                      mapController: _mapController,
+                      options: MapOptions(
+                        initialCenter: const latlong.LatLng(11.7753, 124.8861),
+                        initialZoom: 12.0,
+                        minZoom: 8.0,
+                        maxZoom: 18.0,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName:
+                              'com.example.fisherman_sos_alert',
+                          maxZoom: 18,
+                        ),
+                        // Add boundary polygons only if showBoundaries is true
+                        if (widget.showBoundaries && boundaries.isNotEmpty)
+                          PolygonLayer(
+                            polygons: _buildBoundaryPolygons(boundaries),
+                          ),
+                        if (_currentUserLatLng != null)
+                          MarkerLayer(markers: _buildUserMarkers()),
+                        // Show active fishermen on fisherman map
+                        if (_liveFishermenLocations.isNotEmpty)
+                          MarkerLayer(
+                            markers: _buildLiveLocationMarkers(
+                              _liveFishermenLocations,
+                            ),
+                          ),
+                        // Show admin markers on fisherman map
+                        if (widget.showAdminLocations)
+                          MarkerLayer(markers: _buildAdminMarkers()),
+                      ],
+                    ),
+                    // Map title overlay
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'Samar Waters Map',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                children: [
-                  TileLayer(
-                    urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                    userAgentPackageName: 'com.example.fisherman_sos_alert',
-                    maxZoom: 18,
-                    errorTileCallback: (tile, error, stackTrace) {
-                      print('Tile loading error at ${tile.coordinates}: $error');
-                    },
-                  ),
-                  if (_currentUserLatLng != null)
-                    MarkerLayer(
-                      markers: _buildUserMarkers(),
-                    ),
-                  if (_searchedLocation != null)
-                    MarkerLayer(
-                      markers: _buildSearchedLocationMarker(),
-                    ),
-                  if (widget.showAdminLocations)
-                    MarkerLayer(
-                      markers: _buildAdminMarkers(),
-                    ),
-                  // Show active fishermen on fisherman map
-                  if (!widget.showSOSAlerts && _liveFishermenLocations.isNotEmpty)
-                    MarkerLayer(
-                      markers: _buildLiveLocationMarkers(_liveFishermenLocations),
-                    ),
-                ],
               ),
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'Samar Waters Map',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+            );
+          },
+        );
+      } else {
+        // Simple map without boundaries
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
-        ),
-      );
-    }
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    // Always start with default center, then move if needed
+                    initialCenter: const latlong.LatLng(11.7753, 124.8861),
+                    initialZoom: 12.0,
+                    minZoom: 8.0,
+                    maxZoom: 18.0,
+                    onMapReady: _onMapReady,
+                    // Keep interaction enabled
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all,
+                    ),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.fisherman_sos_alert',
+                      maxZoom: 18,
+                      errorTileCallback: (tile, error, stackTrace) {
+                        print(
+                          'Tile loading error at ${tile.coordinates}: $error',
+                        );
+                      },
+                    ),
+                    if (_currentUserLatLng != null)
+                      MarkerLayer(markers: _buildUserMarkers()),
+                    if (_searchedLocation != null)
+                      MarkerLayer(markers: _buildSearchedLocationMarker()),
+                    if (widget.showAdminLocations)
+                      MarkerLayer(markers: _buildAdminMarkers()),
+                    // Show active fishermen on fisherman map
+                    if (!widget.showSOSAlerts &&
+                        _liveFishermenLocations.isNotEmpty)
+                      MarkerLayer(
+                        markers: _buildLiveLocationMarkers(
+                          _liveFishermenLocations,
+                        ),
+                      ),
+                  ],
+                ),
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Samar Waters Map',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
     } catch (e) {
       // Return a simple error widget if something goes wrong
       return Container(
@@ -773,17 +1088,18 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       final lat = (alert['latitude'] as num).toDouble();
       final lng = (alert['longitude'] as num).toDouble();
       final fishermanId = alert['fisherman_id']?.toString() ?? '';
-      
+
       // Get fisherman name
-      final fishermanName = alert['fisherman_name'] ?? 
-                           alert['fisherman_first_name'] ?? 
-                           alert['fishermen']?['name'] ?? 
-                           alert['fisherman_email'] ?? 
-                           'Unknown';
-      
+      final fishermanName =
+          alert['fisherman_name'] ??
+          alert['fisherman_first_name'] ??
+          alert['fishermen']?['name'] ??
+          alert['fisherman_email'] ??
+          'Unknown';
+
       // Check if this fisherman is outside boundary
       final isOutsideBoundary = _outsideBoundaryFishermen.contains(fishermanId);
-      
+
       return Marker(
         point: latlong.LatLng(lat, lng),
         width: 80,
@@ -818,7 +1134,8 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                   border: Border.all(color: Colors.white, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: (isOutsideBoundary ? Colors.orange : Colors.red).withOpacity(0.3),
+                      color: (isOutsideBoundary ? Colors.orange : Colors.red)
+                          .withOpacity(0.3),
                       blurRadius: 8,
                       spreadRadius: 2,
                     ),
@@ -870,11 +1187,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.location_on,
-              color: Colors.white,
-              size: 28,
-            ),
+            child: const Icon(Icons.location_on, color: Colors.white, size: 28),
           ),
         ),
       ),
@@ -912,98 +1225,114 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       return const [];
     }
 
-    return _adminLocations.map((admin) {
-      // Try multiple possible field names for location
-      final lat = admin['current_latitude'] ?? 
-                  admin['latitude'] ?? 
-                  admin['current_location']?['latitude'];
-      final lng = admin['current_longitude'] ?? 
-                  admin['longitude'] ?? 
-                  admin['current_location']?['longitude'];
-      
-      // Skip admins without location data
-      if (lat == null || lng == null) return null;
-      
-      return Marker(
-        point: latlong.LatLng(
-          (lat as num).toDouble(),
-          (lng as num).toDouble(),
-        ),
-        width: 50,
-        height: 50,
-        child: GestureDetector(
-          onTap: () {
-            // Show admin details on tap
-            _showAdminDetails(admin);
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.green,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.green.withOpacity(0.5),
-                  blurRadius: 12,
-                  spreadRadius: 3,
+    return _adminLocations
+        .map((admin) {
+          // Try multiple possible field names for location
+          final lat =
+              admin['current_latitude'] ??
+              admin['latitude'] ??
+              admin['current_location']?['latitude'];
+          final lng =
+              admin['current_longitude'] ??
+              admin['longitude'] ??
+              admin['current_location']?['longitude'];
+
+          // Skip admins without location data
+          if (lat == null || lng == null) return null;
+
+          return Marker(
+            point: latlong.LatLng(
+              (lat as num).toDouble(),
+              (lng as num).toDouble(),
+            ),
+            width: 50,
+            height: 50,
+            child: GestureDetector(
+              onTap: () {
+                // Show admin details on tap
+                _showAdminDetails(admin);
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.green.withOpacity(0.5),
+                      blurRadius: 12,
+                      spreadRadius: 3,
+                    ),
+                  ],
                 ),
-              ],
+                child: const Icon(
+                  Icons.local_police,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
             ),
-            child: const Icon(
-              Icons.local_police,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-        ),
-      );
-    }).where((marker) => marker != null).cast<Marker>().toList();
+          );
+        })
+        .where((marker) => marker != null)
+        .cast<Marker>()
+        .toList();
   }
 
   // Build markers for live fisherman locations
-  List<Marker> _buildLiveLocationMarkers(List<Map<String, dynamic>> liveLocations) {
+  List<Marker> _buildLiveLocationMarkers(
+    List<Map<String, dynamic>> liveLocations,
+  ) {
     if (liveLocations.isEmpty) return const [];
-    
-    return liveLocations.map((location) {
-      final lat = (location['latitude'] as num?)?.toDouble();
-      final lng = (location['longitude'] as num?)?.toDouble();
-      
-      // Skip locations without valid coordinates
-      if (lat == null || lng == null) return null;
-      
-      // Check how recent the location is (within last 5 minutes = active)
-      final updatedAt = location['updated_at']?.toString();
-      final isRecent = updatedAt != null && 
-          DateTime.now().difference(DateTime.parse(updatedAt)).inMinutes < 5;
-      
-      return Marker(
-        point: latlong.LatLng(lat, lng),
-        width: 48,
-        height: 48,
-        child: GestureDetector(
-          onTap: () => _showLiveLocationDetails(location),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isRecent ? Colors.blue : Colors.grey,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: (isRecent ? Colors.blue : Colors.grey).withOpacity(0.5),
-                  blurRadius: 10,
-                  spreadRadius: 2,
+
+    return liveLocations
+        .map((location) {
+          final lat = (location['latitude'] as num?)?.toDouble();
+          final lng = (location['longitude'] as num?)?.toDouble();
+
+          // Skip locations without valid coordinates
+          if (lat == null || lng == null) return null;
+
+          // Check how recent the location is (within last 5 minutes = active)
+          final updatedAt = location['updated_at']?.toString();
+          final isRecent =
+              updatedAt != null &&
+              DateTime.now().difference(DateTime.parse(updatedAt)).inMinutes <
+                  5;
+
+          return Marker(
+            point: latlong.LatLng(lat, lng),
+            width: 48,
+            height: 48,
+            child: GestureDetector(
+              onTap: () => _showLiveLocationDetails(location),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isRecent ? Colors.blue : Colors.grey,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: (isRecent ? Colors.blue : Colors.grey).withOpacity(
+                        0.5,
+                      ),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
-              ],
+                child: Icon(
+                  Icons.person_pin_circle,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
             ),
-            child: Icon(
-              Icons.person_pin_circle,
-              color: Colors.white,
-              size: 28,
-            ),
-          ),
-        ),
-      );
-    }).where((marker) => marker != null).cast<Marker>().toList();
+          );
+        })
+        .where((marker) => marker != null)
+        .cast<Marker>()
+        .toList();
   }
 
   // Show live location details dialog
@@ -1014,7 +1343,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     final accuracy = (location['accuracy'] as num?)?.toDouble();
     final speed = (location['speed'] as num?)?.toDouble();
     final updatedAt = location['updated_at']?.toString();
-    
+
     String timeAgo = 'Unknown';
     if (updatedAt != null) {
       final updateTime = DateTime.parse(updatedAt);
@@ -1027,7 +1356,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
         timeAgo = '${difference.inHours} hours ago';
       }
     }
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1050,15 +1379,22 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
             if (accuracy != null)
               Text('Accuracy: ${accuracy.toStringAsFixed(0)} meters'),
             if (speed != null)
-              Text('Speed: ${(speed * 3.6).toStringAsFixed(1)} km/h'), // Convert m/s to km/h
+              Text(
+                'Speed: ${(speed * 3.6).toStringAsFixed(1)} km/h',
+              ), // Convert m/s to km/h
             const SizedBox(height: 8),
-            Text('Updated: $timeAgo', 
+            Text(
+              'Updated: $timeAgo',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: updatedAt != null && 
-                  DateTime.now().difference(DateTime.parse(updatedAt)).inMinutes < 5
-                  ? Colors.green
-                  : Colors.orange,
+                color:
+                    updatedAt != null &&
+                        DateTime.now()
+                                .difference(DateTime.parse(updatedAt))
+                                .inMinutes <
+                            5
+                    ? Colors.green
+                    : Colors.orange,
               ),
             ),
           ],
@@ -1102,13 +1438,14 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
   }
 
   void _showAdminDetails(Map<String, dynamic> admin) {
-    final adminName = admin['name'] ?? 
-                     '${admin['first_name'] ?? ''} ${admin['last_name'] ?? ''}'.trim() ??
-                     admin['email'] ?? 
-                     'Admin';
+    final adminName =
+        admin['name'] ??
+        '${admin['first_name'] ?? ''} ${admin['last_name'] ?? ''}'.trim() ??
+        admin['email'] ??
+        'Admin';
     final lat = admin['current_latitude'] ?? admin['latitude'];
     final lng = admin['current_longitude'] ?? admin['longitude'];
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1124,11 +1461,12 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (lat != null && lng != null) ...[
-              Text('Location: ${(lat as num).toStringAsFixed(6)}, ${(lng as num).toStringAsFixed(6)}'),
+              Text(
+                'Location: ${(lat as num).toStringAsFixed(6)}, ${(lng as num).toStringAsFixed(6)}',
+              ),
               const SizedBox(height: 8),
             ],
-            if (admin['email'] != null)
-              Text('Email: ${admin['email']}'),
+            if (admin['email'] != null) Text('Email: ${admin['email']}'),
             if (admin['phone'] != null) ...[
               const SizedBox(height: 4),
               Text('Phone: ${admin['phone']}'),
@@ -1155,22 +1493,30 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     );
   }
 
-  void _checkFishermenOutsideBoundaries(List<Map<String, dynamic>> alerts) async {
+  void _checkFishermenOutsideBoundaries(
+    List<Map<String, dynamic>> alerts,
+  ) async {
     for (final alert in alerts) {
       final lat = (alert['latitude'] as num).toDouble();
       final lng = (alert['longitude'] as num).toDouble();
       final fishermanId = alert['fisherman_id']?.toString() ?? '';
-      
+
       if (fishermanId.isNotEmpty) {
-        final isInsideBoundary = await BoundaryService.isPointInsideBoundary(lat, lng);
-        
-        if (!isInsideBoundary && !_outsideBoundaryFishermen.contains(fishermanId)) {
+        final isInsideBoundary = await BoundaryService.isPointInsideBoundary(
+          lat,
+          lng,
+        );
+
+        if (!isInsideBoundary &&
+            !_outsideBoundaryFishermen.contains(fishermanId)) {
           _outsideBoundaryFishermen.add(fishermanId);
-          
+
           // Show notification for fisherman outside boundary
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              final name = alert['fishermen'] != null ? (alert['fishermen']['name']?.toString() ?? 'Unknown') : 'Fisherman';
+              final name = alert['fishermen'] != null
+                  ? (alert['fishermen']['name']?.toString() ?? 'Unknown')
+                  : 'Fisherman';
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   backgroundColor: Colors.orange,
@@ -1178,7 +1524,9 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                     children: [
                       const Icon(Icons.location_off, color: Colors.white),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('$name is outside safe fishing zone!')),
+                      Expanded(
+                        child: Text('$name is outside safe fishing zone!'),
+                      ),
                     ],
                   ),
                   behavior: SnackBarBehavior.floating,
@@ -1187,7 +1535,8 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
               );
             }
           });
-        } else if (isInsideBoundary && _outsideBoundaryFishermen.contains(fishermanId)) {
+        } else if (isInsideBoundary &&
+            _outsideBoundaryFishermen.contains(fishermanId)) {
           _outsideBoundaryFishermen.remove(fishermanId);
         }
       }
@@ -1196,27 +1545,29 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
 
   void _showAlertDetails(Map<String, dynamic> alert) {
     // Get fisherman information from denormalized fields
-    final fishermanName = alert['fisherman_name'] ?? 
-                         alert['fisherman_first_name'] ?? 
-                         (alert['fisherman_first_name'] != null && alert['fisherman_last_name'] != null
-                           ? '${alert['fisherman_first_name']} ${alert['fisherman_last_name']}'
-                           : null) ??
-                         alert['fishermen']?['name'] ?? 
-                         alert['fisherman_email'] ?? 
-                         'Unknown';
-    
+    final fishermanName =
+        alert['fisherman_name'] ??
+        alert['fisherman_first_name'] ??
+        (alert['fisherman_first_name'] != null &&
+                alert['fisherman_last_name'] != null
+            ? '${alert['fisherman_first_name']} ${alert['fisherman_last_name']}'
+            : null) ??
+        alert['fishermen']?['name'] ??
+        alert['fisherman_email'] ??
+        'Unknown';
+
     final fishermanEmail = alert['fisherman_email'] ?? '-';
     final fishermanPhone = alert['fisherman_phone'] ?? '-';
     final fishermanAddress = alert['fisherman_address'] ?? '-';
     final fishingArea = alert['fisherman_fishing_area'] ?? '-';
     final emergencyContact = alert['fisherman_emergency_contact_person'] ?? '-';
-    
+
     final alertTime = alert['created_at']?.toString() ?? '-';
     final status = alert['status']?.toString() ?? 'active';
     final latitude = alert['latitude']?.toString() ?? '-';
     final longitude = alert['longitude']?.toString() ?? '-';
     final message = alert['message']?.toString() ?? 'SOS Alert';
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1240,10 +1591,14 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
               const SizedBox(height: 8),
               _buildInfoRow('Name', fishermanName.toString()),
               _buildInfoRow('Email', fishermanEmail.toString()),
-              if (fishermanPhone != '-') _buildInfoRow('Phone', fishermanPhone.toString()),
-              if (fishermanAddress != '-') _buildInfoRow('Address', fishermanAddress.toString()),
-              if (fishingArea != '-') _buildInfoRow('Fishing Area', fishingArea.toString()),
-              if (emergencyContact != '-') _buildInfoRow('Emergency Contact', emergencyContact.toString()),
+              if (fishermanPhone != '-')
+                _buildInfoRow('Phone', fishermanPhone.toString()),
+              if (fishermanAddress != '-')
+                _buildInfoRow('Address', fishermanAddress.toString()),
+              if (fishingArea != '-')
+                _buildInfoRow('Fishing Area', fishingArea.toString()),
+              if (emergencyContact != '-')
+                _buildInfoRow('Emergency Contact', emergencyContact.toString()),
               const SizedBox(height: 12),
               const Divider(),
               const SizedBox(height: 12),
@@ -1293,7 +1648,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       ),
     );
   }
-  
+
   Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -1313,16 +1668,13 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                fontWeight: FontWeight.w400,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w400),
             ),
           ),
         ],
       ),
     );
   }
-
 
   void _notifyOnTheWay(String alertId) async {
     try {
@@ -1346,7 +1698,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
 
   void _markAsResolved(String alertId) async {
     final databaseService = DatabaseService();
-    
+
     // Get alert details first
     final alert = await databaseService.getSOSAlertById(alertId);
     if (alert == null) {
@@ -1360,18 +1712,18 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       }
       return;
     }
-    
-    final fishermanName = alert['fisherman_name'] ?? 
-                         alert['fisherman_first_name'] ?? 
-                         alert['fisherman_email'] ?? 
-                         'fisherman';
-    
+
+    final fishermanName =
+        alert['fisherman_name'] ??
+        alert['fisherman_first_name'] ??
+        alert['fisherman_email'] ??
+        'fisherman';
+
     // Show resolve dialog with statistics input (same as rescue notifications page)
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => _ResolveDialog(
-        fishermanName: fishermanName.toString(),
-      ),
+      builder: (context) =>
+          _ResolveDialog(fishermanName: fishermanName.toString()),
     );
 
     if (result != null && result['confirmed'] == true) {
@@ -1401,7 +1753,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       try {
         final casualties = result['casualties'] as int? ?? 0;
         final injured = result['injured'] as int? ?? 0;
-        
+
         // Mark as inactive when resolved is clicked
         final success = await databaseService.updateSOSAlertStatus(
           alertId,
@@ -1409,24 +1761,27 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
           casualties: casualties,
           injured: injured,
         );
-        
+
         if (success) {
           // Wait a moment for database to update
           await Future.delayed(const Duration(milliseconds: 500));
-          
+
           // Refresh dashboard data if available
           if (mounted) {
             try {
-              final adminProvider = Provider.of<AdminProviderSimple>(context, listen: false);
+              final adminProvider = Provider.of<AdminProviderSimple>(
+                context,
+                listen: false,
+              );
               await adminProvider.loadDashboardData();
             } catch (e) {
               print('Could not refresh dashboard: $e');
             }
           }
-          
+
           // Get statistics and show popup
           final stats = await databaseService.getRescueStatistics();
-          
+
           if (mounted) {
             // Show statistics popup
             await showDialog(
@@ -1461,9 +1816,12 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     // For now, we'll use a sample location around Catbalogan, Samar
     const double sampleLat = 11.7753;
     const double sampleLng = 124.8861;
-    
+
     try {
-      final isInsideBoundary = await BoundaryService.isPointInsideBoundary(sampleLat, sampleLng);
+      final isInsideBoundary = await BoundaryService.isPointInsideBoundary(
+        sampleLat,
+        sampleLng,
+      );
       if (widget.onBoundaryCheck != null) {
         widget.onBoundaryCheck!(!isInsideBoundary); // true if outside boundary
       }
@@ -1476,24 +1834,28 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
 // Resolve Dialog with statistics input (same as rescue notifications page)
 class _ResolveDialog extends StatefulWidget {
   final String fishermanName;
-  
+
   const _ResolveDialog({required this.fishermanName});
-  
+
   @override
   State<_ResolveDialog> createState() => _ResolveDialogState();
 }
 
 class _ResolveDialogState extends State<_ResolveDialog> {
-  final TextEditingController _casualtiesController = TextEditingController(text: '0');
-  final TextEditingController _injuredController = TextEditingController(text: '0');
-  
+  final TextEditingController _casualtiesController = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _injuredController = TextEditingController(
+    text: '0',
+  );
+
   @override
   void dispose() {
     _casualtiesController.dispose();
     _injuredController.dispose();
     super.dispose();
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -1503,9 +1865,14 @@ class _ResolveDialogState extends State<_ResolveDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Are you sure you want to mark this SOS alert from ${widget.fishermanName} as resolved?'),
+            Text(
+              'Are you sure you want to mark this SOS alert from ${widget.fishermanName} as resolved?',
+            ),
             const SizedBox(height: 16),
-            const Text('Rescue Statistics:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Rescue Statistics:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             TextField(
               controller: _casualtiesController,
@@ -1558,13 +1925,13 @@ class _RescueStatisticsDialog extends StatelessWidget {
   final int totalRescue;
   final int casualties;
   final int injured;
-  
+
   const _RescueStatisticsDialog({
     required this.totalRescue,
     required this.casualties,
     required this.injured,
   });
-  
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -1603,7 +1970,7 @@ class _RescueStatisticsDialog extends StatelessWidget {
       ],
     );
   }
-  
+
   Widget _buildStatRow(String label, String value, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1615,10 +1982,7 @@ class _RescueStatisticsDialog extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
           Text(
             value,
             style: TextStyle(

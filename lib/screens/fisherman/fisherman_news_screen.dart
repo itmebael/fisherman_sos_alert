@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../constants/colors.dart';
-import '../../widgets/fisherman/news_card.dart';
 import '../../widgets/fisherman/cool_weather_widget.dart';
 import '../../widgets/fisherman/weather_forecast_widget.dart';
 import '../../widgets/fisherman/weather_alerts_widget.dart';
@@ -101,13 +100,17 @@ class _FishermanNewsScreenState extends State<FishermanNewsScreen> {
   }
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Samar Weather & News',
           style: TextStyle(
             color: AppColors.whiteColor,
             fontWeight: FontWeight.bold,
+            fontSize: isMobile ? 16 : 20,
           ),
         ),
         backgroundColor: AppColors.primaryColor,
@@ -120,11 +123,11 @@ class _FishermanNewsScreenState extends State<FishermanNewsScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.location_city, color: AppColors.whiteColor),
+            icon: Icon(Icons.location_city, color: AppColors.whiteColor, size: isMobile ? 20 : 24),
             onPressed: _showCitySelector,
           ),
           IconButton(
-            icon: const Icon(Icons.refresh, color: AppColors.whiteColor),
+            icon: Icon(Icons.refresh, color: AppColors.whiteColor, size: isMobile ? 20 : 24),
             onPressed: _loadWeatherData,
           ),
         ],
@@ -147,58 +150,30 @@ class _FishermanNewsScreenState extends State<FishermanNewsScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             child: Column(
               children: [
-                // News Section Header
-                Container(
-                  margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.newspaper,
-                        color: AppColors.primaryColor,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Samar Maritime News & Weather',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Stay informed about weather conditions and maritime news for Samar waters',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // News Cards
-                ...List.generate(5, (index) {
-            return NewsCard(
-                    title: _getNewsTitle(index),
-                    content: _getNewsContent(index),
-              imageUrl: 'https://via.placeholder.com/300x200',
-              publishDate: DateTime.now().subtract(Duration(days: index)),
-            );
-                }),
+                // Weather Section
+                if (_isLoadingWeather)
+                  _buildLoadingWidget()
+                else ...[
+                  // Current Weather Widget
+                  if (_currentWeather != null)
+                    CoolWeatherWidget(
+                      weather: _currentWeather!,
+                      onTap: _showWeatherDetails,
+                    ),
+                  
+                  // Weather Forecast Widget
+                  if (_forecast.isNotEmpty)
+                    WeatherForecastWidget(
+                      forecast: _forecast,
+                      city: _selectedCity,
+                    ),
+                  
+                  // Weather Alerts Widget
+                  if (_alerts.isNotEmpty)
+                    WeatherAlertsWidget(
+                      alerts: _alerts,
+                    ),
+                ],
                 
                 const SizedBox(height: 20),
               ],
@@ -358,27 +333,5 @@ class _FishermanNewsScreenState extends State<FishermanNewsScreen> {
         ],
       ),
     );
-  }
-
-  String _getNewsTitle(int index) {
-    final titles = [
-      'Samar Marine Weather Advisory',
-      'Fishing Safety Guidelines for Samar Waters',
-      'Samar Coast Guard Updates',
-      'Samar Maritime News',
-      'Emergency Procedures for Samar Fishermen',
-    ];
-    return titles[index % titles.length];
-  }
-
-  String _getNewsContent(int index) {
-    final contents = [
-      'Important weather information for Samar fishermen. Current conditions show moderate winds and clear skies in Samar waters. Stay updated with latest forecasts.',
-      'Safety guidelines for fishing activities in Samar waters. Always wear life jackets and inform someone about your fishing plans in Samar coastal areas.',
-      'Latest updates from the Samar Coast Guard regarding maritime safety and emergency response procedures for Samar fishermen.',
-      'Recent developments in Samar maritime industry and fishing regulations. Stay informed about policy changes affecting Samar fishermen.',
-      'Emergency procedures and contact information for maritime emergencies in Samar waters. Know who to call in case of trouble while fishing in Samar.',
-    ];
-    return contents[index % contents.length];
   }
 }

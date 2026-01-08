@@ -19,7 +19,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _filterStatus = 'All';
-  String _filterUserType = 'All';
 
   @override
   void initState() {
@@ -128,31 +127,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           },
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      // User Type Filter
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: _filterUserType,
-                          decoration: InputDecoration(
-                            labelText: 'User Type',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          ),
-                          items: ['All', 'Fisherman'].map((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) {
-                            setState(() {
-                              _filterUserType = newValue!;
-                            });
-                          },
-                        ),
-                      ),
                     ],
                   ),
                 ],
@@ -219,7 +193,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            _searchQuery.isNotEmpty || _filterStatus != 'All' || _filterUserType != 'All'
+                            _searchQuery.isNotEmpty || _filterStatus != 'All'
                                 ? 'No fishermen found matching your criteria'
                                 : 'No fishermen found',
                             style: TextStyle(
@@ -227,15 +201,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
                               color: Colors.grey.shade600,
                             ),
                           ),
-                          if (_searchQuery.isNotEmpty || _filterStatus != 'All' || _filterUserType != 'All')
+                          if (_searchQuery.isNotEmpty || _filterStatus != 'All')
                             const SizedBox(height: 8),
-                          if (_searchQuery.isNotEmpty || _filterStatus != 'All' || _filterUserType != 'All')
+                          if (_searchQuery.isNotEmpty || _filterStatus != 'All')
                             TextButton(
                               onPressed: () {
                                 setState(() {
                                   _searchQuery = '';
                                   _filterStatus = 'All';
-                                  _filterUserType = 'All';
                                   _searchController.clear();
                                 });
                               },
@@ -291,12 +264,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
         final isActive = user['is_active'] == true;
         if (_filterStatus == 'Active' && !isActive) return false;
         if (_filterStatus == 'Inactive' && isActive) return false;
-      }
-
-      // User type filter
-      if (_filterUserType != 'All') {
-        final userType = user['user_type'] ?? '';
-        if (_filterUserType == 'Fisherman' && userType != 'fisherman') return false;
       }
 
       return true;
@@ -705,41 +672,96 @@ class _UserManagementPageState extends State<UserManagementPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              Navigator.of(context).pop();
-              
-              try {
-                // Show loading
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => const Center(
-                    child: CircularProgressIndicator(),
-                  ),
-                );
-
-                await adminProvider.deleteUser(userWithBoat['user_id']);
-                
-                // Hide loading
-                Navigator.of(context).pop();
-                
-                // Show success message
+              // Get user_id before closing dialog
+              final userId = userWithBoat['user_id'] as String? ?? userWithBoat['id'] as String?;
+              if (userId == null || userId.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('User deleted successfully'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              } catch (e) {
-                // Hide loading
-                Navigator.of(context).pop();
-                
-                // Show error message
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error: ${e.toString()}'),
+                    content: Text('Error: User ID is missing'),
                     backgroundColor: Colors.red,
                   ),
                 );
+                Navigator.of(context).pop();
+                return;
+              }
+
+              // Store scaffold messenger and root context before closing dialog
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
+              final rootContext = Navigator.of(context, rootNavigator: true).context;
+              
+              // Close the confirmation dialog first
+              Navigator.of(context).pop();
+              
+              // Wait a moment to ensure dialog is fully closed
+              await Future.delayed(const Duration(milliseconds: 100));
+              
+              try {
+                // Show loading dialog - use rootNavigator to ensure it's on top
+                if (!rootContext.mounted) return;
+                
+                showDialog(
+                  context: rootContext,
+                  barrierDismissible: false,
+                  barrierColor: Colors.black54,
+                  builder: (dialogContext) {
+                    return const Center(
+                      child: Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(height: 16),
+                              Text('Deleting user...'),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+
+                // Delete the user
+                await adminProvider.deleteUser(userId);
+                
+                // Ensure minimum display time for loading (at least 500ms)
+                await Future.delayed(const Duration(milliseconds: 300));
+                
+                // Hide loading dialog
+                if (rootContext.mounted) {
+                  Navigator.of(rootContext, rootNavigator: true).pop();
+                }
+                
+                // Show success message
+                if (rootContext.mounted) {
+                  scaffoldMessenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('User deleted successfully'),
+                      backgroundColor: Colors.green,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } catch (e) {
+                // Hide loading dialog
+                if (rootContext.mounted) {
+                  final nav = Navigator.of(rootContext, rootNavigator: true);
+                  if (nav.canPop()) {
+                    nav.pop();
+                  }
+                }
+                
+                // Show error message
+                if (rootContext.mounted) {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${e.toString()}'),
+                      backgroundColor: Colors.red,
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),

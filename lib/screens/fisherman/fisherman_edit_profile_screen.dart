@@ -98,6 +98,7 @@ class _FishermanEditProfileScreenState extends State<FishermanEditProfileScreen>
       if (updatedUser.user != null) {
         // Update the auth provider with new user data
         // This will trigger a rebuild of the UI
+        // ignore: invalid_use_of_protected_member
         auth.notifyListeners();
       }
 

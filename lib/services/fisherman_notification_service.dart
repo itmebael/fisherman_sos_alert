@@ -320,6 +320,12 @@ class FishermanNotificationService {
     String? fishermanUid,
     String? fishermanEmail,
   }) async {
+    // Return 0 if no user identification is provided to avoid RLS errors
+    if ((fishermanUid == null || fishermanUid.isEmpty) && 
+        (fishermanEmail == null || fishermanEmail.isEmpty)) {
+      return 0;
+    }
+
     try {
       var query = _supabase
           .from('fisherman_notifications')
@@ -337,6 +343,11 @@ class FishermanNotificationService {
       final response = await query;
       return response.length;
     } catch (e) {
+      // Handle permission denied gracefully
+      if (e.toString().contains('42501') || e.toString().contains('permission denied')) {
+        // Just return 0 silently for permission errors (likely RLS)
+        return 0;
+      }
       print('Error getting unread notifications count: $e');
       return 0;
     }
@@ -364,6 +375,12 @@ class FishermanNotificationService {
     String? fishermanUid,
     String? fishermanEmail,
   }) async {
+    // Return false if no user identification is provided to avoid accidental updates
+    if ((fishermanUid == null || fishermanUid.isEmpty) && 
+        (fishermanEmail == null || fishermanEmail.isEmpty)) {
+      return false;
+    }
+
     try {
       var query = _supabase
           .from('fisherman_notifications')
@@ -394,6 +411,12 @@ class FishermanNotificationService {
     String? fishermanUid,
     String? fishermanEmail,
   }) {
+    // Return empty stream if no user identification is provided
+    if ((fishermanUid == null || fishermanUid.isEmpty) && 
+        (fishermanEmail == null || fishermanEmail.isEmpty)) {
+      return Stream.value([]);
+    }
+
     try {
       // Build stream query conditionally - chain all filters at once
       dynamic streamBuilder = _supabase

@@ -13,3 +13,8 @@ ON public.sos_alerts USING gin (weather_data);
 
 
 
+
+
+
+
+

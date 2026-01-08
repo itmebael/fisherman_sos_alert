@@ -19,6 +19,49 @@ class _ReportsPageState extends State<ReportsPage> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _reports = const [];
+  DateTimeRange? _dateRange;
+  String _statusFilter = 'All'; // All, Active, Safe
+  String _searchQuery = '';
+
+  List<Map<String, dynamic>> get _filteredReports {
+    return _reports.where((report) {
+      // Filter by search query
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final name = (report['fullName'] ?? '').toString().toLowerCase();
+        final boatName = (report['boat_name'] ?? '').toString().toLowerCase();
+        final id = (report['id'] ?? '').toString().toLowerCase();
+        if (!name.contains(query) && !boatName.contains(query) && !id.contains(query)) {
+          return false;
+        }
+      }
+
+      // Filter by status
+      if (_statusFilter != 'All') {
+        final status = report['status'] ?? '';
+        if (_statusFilter == 'Safe') {
+          if (status != 'inactive' && status != 'rescued') return false;
+        } else if (_statusFilter == 'Active') {
+          if (status == 'inactive' || status == 'rescued') return false;
+        }
+      }
+
+      // Filter by date range
+      if (_dateRange != null) {
+        final dateStr = report['distressTime']?.toString();
+        if (dateStr != null) {
+          final date = DateTime.tryParse(dateStr);
+          if (date != null) {
+            if (date.isBefore(_dateRange!.start) || date.isAfter(_dateRange!.end.add(const Duration(days: 1)))) {
+              return false;
+            }
+          }
+        }
+      }
+
+      return true;
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -110,13 +153,21 @@ class _ReportsPageState extends State<ReportsPage> {
     final buffer = StringBuffer();
     buffer.writeln('RESCUE REPORTS');
     buffer.writeln('Generated: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}');
-    buffer.writeln('Total Reports: ${_reports.length}');
+    
+    // Add Filter Summary
+    if (_statusFilter != 'All') buffer.writeln('Status Filter: $_statusFilter');
+    if (_dateRange != null) {
+      buffer.writeln('Date Range: ${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}');
+    }
+    if (_searchQuery.isNotEmpty) buffer.writeln('Search Query: "$_searchQuery"');
+    
+    buffer.writeln('Total Reports: ${_filteredReports.length}');
     buffer.writeln('');
     buffer.writeln('=' * 70);
     buffer.writeln('');
 
-    for (int i = 0; i < _reports.length; i++) {
-      final r = _reports[i];
+    for (int i = 0; i < _filteredReports.length; i++) {
+      final r = _filteredReports[i];
       buffer.writeln('Report #${i + 1}');
       buffer.writeln('ID: ${r['id']}');
       buffer.writeln('Full Name: ${r['fullName'] ?? '-'}');
@@ -162,7 +213,7 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<void> _viewReport() async {
-    if (_reports.isEmpty) {
+    if (_filteredReports.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No reports to view')),
       );
@@ -197,7 +248,7 @@ class _ReportsPageState extends State<ReportsPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Total Reports: ${_reports.length} | Generated: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}',
+                        'Total Reports: ${_filteredReports.length} | Generated: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}',
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
@@ -242,7 +293,7 @@ class _ReportsPageState extends State<ReportsPage> {
   String _buildCsv() {
     final buffer = StringBuffer();
     buffer.writeln('ID,Full Name,Status,Boat Name,Date,Distress Time,Rescue Time,Temperature,Weather Condition,Humidity,Wind Speed,Pressure,Casualties,Injured');
-    for (final r in _reports) {
+    for (final r in _filteredReports) {
       final id = (r['id'] ?? '').toString().replaceAll(',', ' ');
       final name = (r['fullName'] ?? '').toString().replaceAll(',', ' ');
       final status = (r['status'] ?? '').toString().replaceAll(',', ' ');
@@ -267,7 +318,7 @@ class _ReportsPageState extends State<ReportsPage> {
   }
 
   Future<void> _exportCsv() async {
-    if (_reports.isEmpty) return;
+    if (_filteredReports.isEmpty) return;
     
     // Show confirmation dialog before downloading
     final confirmed = await showDialog<bool>(
@@ -382,70 +433,188 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Generate Report Section
-                if (_reports.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.primaryColor.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
+              // Filters and Download Section
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Icon(Icons.description, color: AppColors.primaryColor),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Generate Report',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              Text(
-                                'Total Reports: ${_reports.length}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
+                        const Text(
+                          'Rescue Reports',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(width: 12),
                         ElevatedButton.icon(
-                          onPressed: _viewReport,
-                          icon: const Icon(Icons.visibility, size: 18),
-                          label: const Text('View'),
+                          onPressed: _exportCsv,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primaryColor,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          icon: const Icon(Icons.download, size: 20),
+                          label: const Text('Download Report'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: [
+                        // Date Range Filter
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.whiteColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () async {
+                                final picked = await showDateRangePicker(
+                                  context: context,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime.now(),
+                                  initialDateRange: _dateRange,
+                                  builder: (context, child) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        colorScheme: ColorScheme.light(
+                                          primary: AppColors.primaryColor,
+                                          onPrimary: Colors.white,
+                                          surface: Colors.white,
+                                          onSurface: Colors.black,
+                                        ),
+                                        datePickerTheme: DatePickerThemeData(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                        ),
+                                      ),
+                                      child: child!,
+                                    );
+                                  },
+                                );
+                                if (picked != null) {
+                                  setState(() => _dateRange = picked);
+                                }
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(
+                                        Icons.calendar_month_rounded,
+                                        size: 20,
+                                        color: AppColors.primaryColor,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Date Range',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade600,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          _dateRange == null
+                                              ? 'All Dates'
+                                              : '${DateFormat('MMM d').format(_dateRange!.start)} - ${DateFormat('MMM d').format(_dateRange!.end)}',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 12),
+                                    if (_dateRange != null)
+                                      IconButton(
+                                        icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                                        onPressed: () => setState(() => _dateRange = null),
+                                        constraints: const BoxConstraints(),
+                                        padding: EdgeInsets.zero,
+                                        tooltip: 'Clear filter',
+                                      )
+                                    else
+                                      const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          onPressed: _exportCsv,
-                          icon: const Icon(Icons.download, size: 18),
-                          label: const Text('Download'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+
+                        // Status Filter
+                        SizedBox(
+                          width: 200,
+                          child: DropdownButtonFormField<String>(
+                            value: _statusFilter,
+                            decoration: InputDecoration(
+                              labelText: 'Status',
+                              prefixIcon: const Icon(Icons.filter_alt, size: 20),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              isDense: true,
+                            ),
+                            items: ['All', 'Active', 'Safe']
+                                .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 14))))
+                                .toList(),
+                            onChanged: (v) => setState(() => _statusFilter = v!),
+                          ),
+                        ),
+
+                        // Search
+                        SizedBox(
+                          width: 300,
+                          child: TextField(
+                            onChanged: (v) => setState(() => _searchQuery = v),
+                            decoration: InputDecoration(
+                              labelText: 'Search',
+                              hintText: 'Name, Boat, or ID',
+                              prefixIcon: const Icon(Icons.search, size: 20),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              isDense: true,
+                            ),
+                            style: const TextStyle(fontSize: 14),
                           ),
                         ),
                       ],
                     ),
-                  ),
+                  ],
+                ),
+              ),
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
@@ -479,30 +648,7 @@ class _ReportsPageState extends State<ReportsPage> {
                           ),
                         ),
                         const Divider(height: 1),
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Container(
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: AppColors.whiteColor,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.dividerColor),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: Row(
-                              children: const [
-                                Icon(Icons.search, color: AppColors.textSecondary),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Search',
-                                    style: TextStyle(color: AppColors.textSecondary),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+
                         // Reports table
                         Expanded(
                           child: Padding(
@@ -521,13 +667,14 @@ class _ReportsPageState extends State<ReportsPage> {
                                   ),
                                   child: const Row(
                                     children: [
-                                      Expanded(flex: 1, child: Center(child: Text('Profile', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Boat Name', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Distress Time', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Rescue Time', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Weather', style: TextStyle(fontWeight: FontWeight.bold)))),
-                                      Expanded(flex: 1, child: Center(child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Boat Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Weather', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Casualties', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Injured', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                     ],
                                   ),
                                 ),
@@ -543,16 +690,16 @@ class _ReportsPageState extends State<ReportsPage> {
                                                 style: const TextStyle(color: Colors.red),
                                               ),
                                             )
-                                          : _reports.isEmpty
-                                              ? const Center(child: Text('No reports found'))
+                                          : _filteredReports.isEmpty
+                                              ? const Center(child: Text('No reports found matching criteria'))
                                               : ListView.separated(
-                                                  itemCount: _reports.length,
+                                                  itemCount: _filteredReports.length,
                                                   separatorBuilder: (_, __) => Divider(color: AppColors.dividerColor.withOpacity(0.3), height: 1),
                                                   itemBuilder: (context, index) {
-                                                    final r = _reports[index];
+                                                    final r = _filteredReports[index];
                                                     return Container(
                                                       color: Colors.white,
-                                                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                                                      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
                                                       child: Row(
                                                         children: [
                                                           // Profile picture
@@ -560,16 +707,16 @@ class _ReportsPageState extends State<ReportsPage> {
                                                             flex: 1,
                                                             child: Center(
                                                               child: Container(
-                                                                width: 40,
-                                                                height: 40,
+                                                                width: 32,
+                                                                height: 32,
                                                                 decoration: BoxDecoration(
                                                                   color: Colors.blue.withOpacity(0.2),
-                                                                  borderRadius: BorderRadius.circular(20),
+                                                                  borderRadius: BorderRadius.circular(16),
                                                                 ),
                                                                 child: const Icon(
                                                                   Icons.person,
                                                                   color: Colors.blue,
-                                                                  size: 24,
+                                                                  size: 20,
                                                                 ),
                                                               ),
                                                             ),
@@ -580,7 +727,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                             child: Center(
                                                               child: Text(
                                                                 (r['fullName'] ?? '-').toString(),
-                                                                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500, fontSize: 13),
+                                                                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500, fontSize: 12),
                                                                 textAlign: TextAlign.center,
                                                                 maxLines: 2,
                                                                 overflow: TextOverflow.ellipsis,
@@ -592,7 +739,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                             flex: 2,
                                                             child: Center(
                                                               child: Container(
-                                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                                 decoration: BoxDecoration(
                                                                   color: Colors.blue.withOpacity(0.1),
                                                                   borderRadius: BorderRadius.circular(8),
@@ -601,17 +748,17 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                 child: Row(
                                                                   mainAxisSize: MainAxisSize.min,
                                                                   children: [
-                                                                    const Icon(Icons.directions_boat, size: 14, color: Colors.blue),
+                                                                    const Icon(Icons.directions_boat, size: 12, color: Colors.blue),
                                                                     const SizedBox(width: 4),
                                                                     Flexible(
                                                                       child: Text(
                                                                         (r['boat_name'] ?? '-').toString(),
                                                                         style: const TextStyle(
                                                                           color: AppColors.textPrimary,
-                                                                          fontSize: 11,
+                                                                          fontSize: 10,
                                                                           fontWeight: FontWeight.w500,
                                                                         ),
-                                                                        maxLines: 2,
+                                                                        maxLines: 1,
                                                                         overflow: TextOverflow.ellipsis,
                                                                         textAlign: TextAlign.center,
                                                                       ),
@@ -621,31 +768,12 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               ),
                                                             ),
                                                           ),
-                                                          // Distress Time
+                                                          // Date
                                                           Expanded(
                                                             flex: 2,
                                                             child: Center(
                                                               child: Text(
-                                                                (r['distressTime'] ?? '-').toString().split('T').first + '\n' + 
-                                                                ((r['distressTime'] ?? '-').toString().contains('T') 
-                                                                  ? (r['distressTime'] ?? '-').toString().split('T')[1].substring(0, 5)
-                                                                  : ''),
-                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
-                                                                textAlign: TextAlign.center,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          // Rescue Time
-                                                          Expanded(
-                                                            flex: 2,
-                                                            child: Center(
-                                                              child: Text(
-                                                                r['rescueTime'] != null 
-                                                                  ? (r['rescueTime'].toString().split('T').first + '\n' + 
-                                                                     (r['rescueTime'].toString().contains('T') 
-                                                                       ? r['rescueTime'].toString().split('T')[1].substring(0, 5)
-                                                                       : ''))
-                                                                  : '-',
+                                                                (r['distressTime'] ?? '-').toString().split('T').first,
                                                                 style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
                                                                 textAlign: TextAlign.center,
                                                               ),
@@ -658,7 +786,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               child: Tooltip(
                                                                 message: _buildWeatherTooltip(r),
                                                                 child: Container(
-                                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                                   decoration: BoxDecoration(
                                                                     color: Colors.blue.withOpacity(0.1),
                                                                     borderRadius: BorderRadius.circular(8),
@@ -667,13 +795,13 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                   child: Row(
                                                                     mainAxisSize: MainAxisSize.min,
                                                                     children: [
-                                                                      const Icon(Icons.cloud, size: 14, color: Colors.blue),
+                                                                      const Icon(Icons.cloud, size: 12, color: Colors.blue),
                                                                       const SizedBox(width: 4),
                                                                       Flexible(
                                                                         child: Text(
                                                                           (r['weather'] ?? '-').toString(),
                                                                           style: const TextStyle(color: AppColors.textPrimary, fontSize: 10),
-                                                                          maxLines: 2,
+                                                                          maxLines: 1,
                                                                           overflow: TextOverflow.ellipsis,
                                                                           textAlign: TextAlign.center,
                                                                         ),
@@ -684,12 +812,32 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               ),
                                                             ),
                                                           ),
+                                                          // Casualties
+                                                          Expanded(
+                                                            flex: 1,
+                                                            child: Center(
+                                                              child: Text(
+                                                                (r['casualties'] ?? 0).toString(),
+                                                                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Injured
+                                                          Expanded(
+                                                            flex: 1,
+                                                            child: Center(
+                                                              child: Text(
+                                                                (r['injured'] ?? 0).toString(),
+                                                                style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                                                              ),
+                                                            ),
+                                                          ),
                                                           // Status
                                                           Expanded(
                                                             flex: 1,
                                                             child: Center(
                                                               child: Container(
-                                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                                 decoration: BoxDecoration(
                                                                   color: (r['status'] == 'inactive' ? Colors.green : Colors.red).withOpacity(0.1),
                                                                   borderRadius: BorderRadius.circular(12),
@@ -701,14 +849,14 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                     Icon(
                                                                       r['status'] == 'inactive' ? Icons.check_circle : Icons.warning,
                                                                       color: r['status'] == 'inactive' ? Colors.green : Colors.red,
-                                                                      size: 12,
+                                                                      size: 10,
                                                                     ),
-                                                                    const SizedBox(width: 4),
+                                                                    const SizedBox(width: 2),
                                                                     Text(
-                                                                      r['status'] == 'inactive' ? 'Rescued' : 'Active',
+                                                                      r['status'] == 'inactive' ? 'Safe' : 'Active',
                                                                       style: TextStyle(
                                                                         color: r['status'] == 'inactive' ? Colors.green : Colors.red,
-                                                                        fontSize: 10,
+                                                                        fontSize: 9,
                                                                         fontWeight: FontWeight.w600,
                                                                       ),
                                                                     ),

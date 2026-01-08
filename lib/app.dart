@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'constants/colors.dart';
 import 'constants/routes.dart';
@@ -13,7 +14,27 @@ class BantayDagatApp extends StatelessWidget {
       title: 'Salbar Mangirisda',
       theme: ThemeData(
         primarySwatch: AppColors.primarySwatch,
-        fontFamily: 'Roboto',
+        textTheme: GoogleFonts.poppinsTextTheme(
+          const TextTheme(
+            displayLarge: TextStyle(fontSize: 57),
+            displayMedium: TextStyle(fontSize: 45),
+            displaySmall: TextStyle(fontSize: 36),
+            headlineLarge: TextStyle(fontSize: 32),
+            headlineMedium: TextStyle(fontSize: 28),
+            headlineSmall: TextStyle(fontSize: 24),
+            titleLarge: TextStyle(fontSize: 22),
+            titleMedium: TextStyle(fontSize: 16),
+            titleSmall: TextStyle(fontSize: 14),
+            bodyLarge: TextStyle(fontSize: 16),
+            bodyMedium: TextStyle(fontSize: 14),
+            bodySmall: TextStyle(fontSize: 12),
+            labelLarge: TextStyle(fontSize: 14),
+            labelMedium: TextStyle(fontSize: 12),
+            labelSmall: TextStyle(fontSize: 11),
+          ),
+        ).apply(
+          fontSizeFactor: 1.5,
+        ),
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       initialRoute: AppRoutes.splash,

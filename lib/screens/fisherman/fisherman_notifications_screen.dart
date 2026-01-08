@@ -847,14 +847,18 @@ class _FishermanNotificationsScreenState extends State<FishermanNotificationsScr
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    
     return Scaffold(
       drawer: const FishermanDrawer(),
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Notifications',
           style: TextStyle(
             color: AppColors.whiteColor,
             fontWeight: FontWeight.bold,
+            fontSize: isMobile ? 18 : 20,
           ),
         ),
         backgroundColor: AppColors.primaryColor,
@@ -867,12 +871,12 @@ class _FishermanNotificationsScreenState extends State<FishermanNotificationsScr
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert, color: AppColors.whiteColor),
+            icon: Icon(Icons.more_vert, color: AppColors.whiteColor, size: isMobile ? 20 : 24),
             onPressed: () => _showMenu(context),
             tooltip: 'Notification Options',
           ),
           IconButton(
-            icon: const Icon(Icons.refresh, color: AppColors.whiteColor),
+            icon: Icon(Icons.refresh, color: AppColors.whiteColor, size: isMobile ? 20 : 24),
             onPressed: _loadNotifications,
             tooltip: 'Refresh',
           ),
@@ -887,29 +891,29 @@ class _FishermanNotificationsScreenState extends State<FishermanNotificationsScr
                 ),
               )
             : _notifications.isEmpty
-                ? const Center(
+                ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
                           Icons.notifications_none,
-                          size: 80,
+                          size: isMobile ? 60 : 80,
                           color: Colors.grey,
                         ),
-                        SizedBox(height: 16),
+                        SizedBox(height: isMobile ? 12 : 16),
                         Text(
                           'No notifications yet',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: isMobile ? 16 : 18,
                             color: Colors.grey,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        SizedBox(height: 8),
+                        SizedBox(height: isMobile ? 6 : 8),
                         Text(
                           'You\'ll see important updates here',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: isMobile ? 12 : 14,
                             color: Colors.grey,
                           ),
                         ),
@@ -917,14 +921,14 @@ class _FishermanNotificationsScreenState extends State<FishermanNotificationsScr
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.all(isMobile ? 12 : 16),
                     itemCount: _notifications.length,
                     itemBuilder: (context, index) {
                       final notification = _notifications[index];
                       final isRead = notification['isRead'] as bool;
                       
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
+                        margin: EdgeInsets.only(bottom: isMobile ? 10 : 12),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
@@ -937,9 +941,9 @@ class _FishermanNotificationsScreenState extends State<FishermanNotificationsScr
                           ],
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.all(16),
+                          contentPadding: EdgeInsets.all(isMobile ? 12 : 16),
                           leading: Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: EdgeInsets.all(isMobile ? 10 : 12),
                             decoration: BoxDecoration(
                               color: _getNotificationColor(notification['type']).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
@@ -947,13 +951,13 @@ class _FishermanNotificationsScreenState extends State<FishermanNotificationsScr
                             child: Icon(
                               _getNotificationIcon(notification['type']),
                               color: _getNotificationColor(notification['type']),
-                              size: 24,
+                              size: isMobile ? 20 : 24,
                             ),
                           ),
                           title: Text(
                             notification['title'],
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: isMobile ? 14 : 16,
                               fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
                               color: isRead ? Colors.grey[700] : Colors.black,
                             ),
@@ -961,20 +965,20 @@ class _FishermanNotificationsScreenState extends State<FishermanNotificationsScr
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const SizedBox(height: 4),
+                              SizedBox(height: isMobile ? 3 : 4),
                               Text(
                                 notification['message'],
                                 style: TextStyle(
-                                  fontSize: 14,
+                                  fontSize: isMobile ? 12 : 14,
                                   color: isRead ? Colors.grey[600] : Colors.grey[800],
                                   height: 1.4,
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              SizedBox(height: isMobile ? 6 : 8),
                               Text(
                                 _getTimeAgo(notification['timestamp']),
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: isMobile ? 11 : 12,
                                   color: Colors.grey[500],
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -983,8 +987,8 @@ class _FishermanNotificationsScreenState extends State<FishermanNotificationsScr
                           ),
                           trailing: !isRead
                               ? Container(
-                                  width: 8,
-                                  height: 8,
+                                  width: isMobile ? 6 : 8,
+                                  height: isMobile ? 6 : 8,
                                   decoration: const BoxDecoration(
                                     color: AppColors.primaryColor,
                                     shape: BoxShape.circle,

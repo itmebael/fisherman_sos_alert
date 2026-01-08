@@ -250,3 +250,8 @@ COMMENT ON FUNCTION public.notify_fisherman_status_change() IS 'Trigger function
 
 
 
+
+
+
+
+
