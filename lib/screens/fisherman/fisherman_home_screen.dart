@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
-import 'dart:async';
 import '../../constants/colors.dart';
 import '../../constants/strings.dart';
-import '../../constants/routes.dart';
 import 'sos_button.dart';
 import '../../services/global_notification_manager.dart';
 import '../../providers/auth_provider.dart';

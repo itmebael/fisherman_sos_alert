@@ -345,11 +345,18 @@ class DatabaseService {
     double? altitude,
   }) async {
     try {
+      // Check if fishermanUid is a valid UUID (admin IDs like "admin_xxx" are not valid UUIDs)
+      String? validUid = fishermanUid;
+      if (fishermanUid != null && !_isValidUUID(fishermanUid)) {
+        // If not a valid UUID (e.g., admin IDs), set to null and use email instead
+        validUid = null;
+      }
+      
       await _connectionService.executeWithRetry(() async {
         // Try to use the upsert function first (more efficient)
         try {
           await _supabase.rpc('upsert_live_location', params: {
-            'p_fisherman_uid': fishermanUid,
+            'p_fisherman_uid': validUid,
             'p_fisherman_email': fishermanEmail,
             'p_fisherman_display_id': fishermanDisplayId,
             'p_fisherman_name': fishermanName,
@@ -364,11 +371,22 @@ class DatabaseService {
           // If function doesn't exist, fall back to manual upsert
           print('Upsert function not available, using manual upsert: $e');
           
-          // Check if location exists for this fisherman
-          final existing = await _supabase
+          // Check if location exists for this fisherman (by email if no valid UUID)
+          var query = _supabase
               .from('live_locations')
-              .select('id')
-              .eq('fisherman_uid', fishermanUid ?? '')
+              .select('id');
+          
+          if (validUid != null) {
+            query = query.eq('fisherman_uid', validUid);
+          } else if (fishermanEmail != null && fishermanEmail.isNotEmpty) {
+            query = query.eq('fisherman_email', fishermanEmail);
+          } else {
+            // No valid identifier, skip update
+            print('No valid identifier for location update');
+            return;
+          }
+          
+          final existing = await query
               .eq('is_active', true)
               .maybeSingle();
 
@@ -395,7 +413,7 @@ class DatabaseService {
             await _supabase
                 .from('live_locations')
                 .insert({
-                  'fisherman_uid': fishermanUid,
+                  if (validUid != null) 'fisherman_uid': validUid,
                   'fisherman_email': fishermanEmail,
                   'fisherman_display_id': fishermanDisplayId,
                   'fisherman_name': fishermanName,
@@ -415,6 +433,17 @@ class DatabaseService {
       print('Error updating live location: $e');
       // Don't throw - location updates should be resilient
     }
+  }
+
+  // Helper function to check if a string is a valid UUID
+  bool _isValidUUID(String? value) {
+    if (value == null || value.isEmpty) return false;
+    // UUID format: 8-4-4-4-12 hexadecimal characters
+    final uuidRegex = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    );
+    return uuidRegex.hasMatch(value);
   }
 
   // Get all live locations
@@ -540,19 +569,18 @@ class DatabaseService {
       final user = await SharedPreferencesHelper.getUserData();
       final userId = user?.id;
       final userEmail = user?.email;
+      
+      // Use live_locations table for coastguards instead of coastguards table
+      // This is consistent with how fishermen locations are tracked
       return await _connectionService.executeWithRetry(() async {
-        var query = _supabase.from('coastguards').update({
-          'current_latitude': latitude,
-          'current_longitude': longitude,
-          // 'last_active': DateTime.now().toIso8601String(),
-          'is_active': true,
-        });
-        if (userId != null && userId.isNotEmpty) {
-          query = query.eq('id', userId);
-        } else if (userEmail != null && userEmail.isNotEmpty) {
-          query = query.eq('email', userEmail);
-        }
-        await query;
+        await updateLiveLocation(
+          fishermanUid: userId,
+          fishermanEmail: userEmail,
+          fishermanDisplayId: userId,
+          fishermanName: user?.name,
+          latitude: latitude,
+          longitude: longitude,
+        );
         return true;
       });
     } catch (e) {
@@ -778,6 +806,27 @@ class DatabaseService {
         print('❌ Error updating SOS alert: $e');
         print('Error details: ${e.toString()}');
         print('Error type: ${e.runtimeType}');
+        return false;
+      }
+    });
+  }
+
+  // Delete SOS alert
+  Future<bool> deleteSOSAlert(String alertId) async {
+    return await _connectionService.executeWithRetry(() async {
+      try {
+        print('=== DELETING SOS ALERT ===');
+        print('Alert ID: $alertId');
+        
+        await _supabase
+            .from('sos_alerts')
+            .delete()
+            .eq('id', alertId);
+            
+        print('✅ SOS alert deleted: $alertId');
+        return true;
+      } catch (e) {
+        print('❌ Error deleting SOS alert: $e');
         return false;
       }
     });
@@ -1272,7 +1321,7 @@ class DatabaseService {
       // Select columns including weather_data, status, and fisherman_uid for boat lookup
       final response = await _supabase
           .from('sos_alerts')
-          .select('id, status, created_at, resolved_at, fisherman_uid, fisherman_name, fisherman_email, weather_data, casualties, injured')
+          .select('id, status, created_at, resolved_at, fisherman_uid, fisherman_name, fisherman_email, fisherman_profile_image_url, fisherman_profile_picture_url, weather_data, casualties, injured')
           .order('created_at', ascending: false);
 
       final reports = List<Map<String, dynamic>>.from(response);
@@ -1413,10 +1462,17 @@ class DatabaseService {
           'id': row['id'],
           'status': row['status'],
           'fullName': fullName,
+          'fisherman_name': nameFromAlert,
           'fisherman_uid': fishermanUid,
           'boat_name': boatName, // Add boat_name here
+          'boat_registration_number': boatName, // Also include as registration number
           'distressTime': row['created_at'],
           'rescueTime': row['resolved_at'],
+          'resolved_at': row['resolved_at'],
+          'created_at': row['created_at'],
+          'profile_image_url': row['fisherman_profile_image_url'] ?? row['fisherman_profile_picture_url'],
+          'fisherman_profile_image_url': row['fisherman_profile_image_url'],
+          'fisherman_profile_picture_url': row['fisherman_profile_picture_url'],
           'weather': weatherInfo,
           'weatherDetails': weatherDetails,
           'weatherData': row['weather_data'],

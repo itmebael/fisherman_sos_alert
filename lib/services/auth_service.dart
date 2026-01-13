@@ -28,7 +28,7 @@ class AuthService {
     // First, try to restore from Supabase session (for regular users)
     final session = _supabase.auth.currentSession;
     if (session != null) {
-      await _fetchUserData(session.user.id);
+      await fetchUserData(session.user.id);
       return;
     }
     
@@ -78,7 +78,7 @@ class AuthService {
         );
 
         if (response.user != null) {
-          await _fetchUserData(response.user!.id);
+          await fetchUserData(response.user!.id);
           return true;  
         }
 
@@ -233,7 +233,7 @@ class AuthService {
           // (insert might succeed but response might fail due to network)
           print('Insert error occurred, checking if account exists: $insertError');
           
-          final accountExists = await _checkAccountExists(userId!, email.trim(), userType);
+          final accountExists = await _checkAccountExists(userId, email.trim(), userType);
           if (accountExists) {
             print('Account exists despite insert error - registration succeeded');
             return true;
@@ -271,7 +271,7 @@ class AuthService {
         // Verify account was created successfully (even if insert seemed to succeed)
         if (insertSucceeded) {
           try {
-            final accountExists = await _checkAccountExists(userId!, email.trim(), userType);
+            final accountExists = await _checkAccountExists(userId, email.trim(), userType);
             if (accountExists) {
               // Auto-login after successful registration
               try {
@@ -563,7 +563,7 @@ class AuthService {
           // If insert fails, ALWAYS check if account was actually created
           print('Fisherman insert error occurred, checking if account exists: $insertError');
           
-          final accountExists = await _checkAccountExists(userId!, email.trim(), 'fisherman');
+          final accountExists = await _checkAccountExists(userId, email.trim(), 'fisherman');
           if (accountExists) {
             print('Account exists despite insert error - registration succeeded');
             return true;
@@ -717,7 +717,7 @@ class AuthService {
   }
 
   // Fetch user data from database
-  Future<void> _fetchUserData(String userId) async {
+  Future<void> fetchUserData(String userId) async {
     try {
       // Try to fetch from fishermen table first
       final fishermanResponse = await _supabase
@@ -928,7 +928,7 @@ class AuthService {
       }
 
       if (response.user != null) {
-        await _fetchUserData(response.user!.id);
+        await fetchUserData(response.user!.id);
         print('Auto-login successful after registration');
       } else {
         print('Auto-login failed - no user returned');

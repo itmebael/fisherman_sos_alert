@@ -12,6 +12,7 @@ import '../../providers/admin_provider_simple.dart';
 import '../../widgets/common/connection_status_widget.dart';
 import '../../widgets/common/liquid_glass_container.dart';
 import '../../services/database_service.dart';
+import '../../services/live_location_service.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -22,11 +23,13 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final LiveLocationService _liveLocationService = LiveLocationService();
   bool _initialAlertHandled = false;
   StreamSubscription<List<Map<String, dynamic>>>? _sosSubscription;
   @override
   void initState() {
     super.initState();
+    _startLiveTracking();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminProviderSimple>().loadDashboardData();
       _listenInitialSOSAlerts();
@@ -35,9 +38,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   void dispose() {
+    _liveLocationService.stopTracking();
     _sosSubscription?.cancel();
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _startLiveTracking() async {
+    try {
+      await _liveLocationService.startTracking();
+    } catch (e) {
+      print('Error starting admin live location tracking: $e');
+    }
   }
 
   Future<void> _listenInitialSOSAlerts() async {
@@ -388,7 +400,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                   value: 'Manage',
                                   icon: Icons.settings,
                                   color: Colors.orange.shade800,
-                                  onTap: () => Navigator.pushNamed(context, '/device-management'),
+                                  onTap: () => Navigator.pushNamed(context, AppRoutes.deviceManagement),
                                 ),
                               ],
                             )
@@ -410,7 +422,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                     value: 'Manage',
                                     icon: Icons.settings,
                                     color: Colors.orange.shade800,
-                                    onTap: () => Navigator.pushNamed(context, '/device-management'),
+                                    onTap: () => Navigator.pushNamed(context, AppRoutes.deviceManagement),
                                   ),
                                 ),
                               ],
@@ -820,6 +832,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -878,143 +891,163 @@ class _AdminDashboardState extends State<AdminDashboard> {
             const SizedBox(height: 24),
             SizedBox(
               height: isMobile ? 250 : 300,
-              child: stats.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No data available',
-                        style: TextStyle(color: Colors.black54),
-                      ),
-                    )
-                  : LineChart(
-                      LineChartData(
-                        gridData: FlGridData(
-                          show: true,
-                          drawVerticalLine: false,
-                          horizontalInterval: 1,
-                          getDrawingHorizontalLine: (value) {
-                            return FlLine(
-                              color: Colors.black12,
-                              strokeWidth: 1,
-                            );
-                          },
-                        ),
-                        titlesData: FlTitlesData(
-                          show: true,
-                          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              reservedSize: 30,
-                              interval: 1,
-                              getTitlesWidget: (value, meta) {
-                                final index = value.toInt();
-                                if (index >= 0 && index < stats.length) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Text(
-                                      stats[index].label,
-                                      style: TextStyle(
-                                        color: Colors.black54,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: isMobile ? 8 : 10,
-                                      ),
-                                    ),
-                                  );
-                                }
-                                return const Text('');
-                              },
-                            ),
+              child: ClipRect(
+                clipBehavior: Clip.none,
+                child: stats.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No data available',
+                            style: TextStyle(color: Colors.black54),
                           ),
-                          leftTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              interval: 1,
-                              getTitlesWidget: (value, meta) {
-                                if (value % 1 == 0) {
-                                  return Text(
-                                    value.toInt().toString(),
-                                    style: const TextStyle(
-                                      color: Colors.black54,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 10,
-                                    ),
-                                    textAlign: TextAlign.right,
-                                  );
-                                }
-                                return const SizedBox();
-                              },
-                              reservedSize: 30,
-                            ),
-                          ),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        minX: 0,
-                        maxX: (stats.length - 1).toDouble(),
-                        minY: 0,
-                        lineBarsData: [
-                          _buildLineChartBarData(
-                            stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.sosCount.toDouble())).toList(),
-                            Colors.red.shade700,
-                          ),
-                          _buildLineChartBarData(
-                            stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.injuredCount.toDouble())).toList(),
-                            Colors.amber.shade800,
-                          ),
-                          _buildLineChartBarData(
-                            stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.casualtyCount.toDouble())).toList(),
-                            Colors.grey,
-                          ),
-                          _buildLineChartBarData(
-                            stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.rescuedCount.toDouble())).toList(),
-                            Colors.green.shade700,
-                          ),
-                        ],
-                        lineTouchData: LineTouchData(
-                          touchTooltipData: LineTouchTooltipData(
-                            tooltipBgColor: Colors.black.withOpacity(0.8),
-                            getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                              return touchedBarSpots.map((barSpot) {
-                                final flSpot = barSpot;
-                                if (flSpot.x < 0 || flSpot.x >= stats.length) {
-                                  return null;
-                                }
-                                
-                                String label = '';
-                                Color color = Colors.grey;
-                                
-                                switch (barSpot.barIndex) {
-                                  case 0:
-                                    label = 'SOS';
-                                    color = Colors.red.shade700;
-                                    break;
-                                  case 1:
-                                    label = 'Injured';
-                                    color = Colors.amber.shade800;
-                                    break;
-                                  case 2:
-                                    label = 'Casualties';
-                                    color = Colors.grey;
-                                    break;
-                                  case 3:
-                                    label = 'Rescued';
-                                    color = Colors.green.shade700;
-                                    break;
-                                }
-
-                                return LineTooltipItem(
-                                  '$label: ${flSpot.y.toInt()}',
-                                  TextStyle(
-                                    color: color,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                );
-                              }).toList();
+                        )
+                      : LineChart(
+                        LineChartData(
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: 1,
+                            getDrawingHorizontalLine: (value) {
+                              return FlLine(
+                                color: Colors.black12,
+                                strokeWidth: 1,
+                              );
                             },
                           ),
+                          titlesData: FlTitlesData(
+                            show: true,
+                            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 30,
+                                interval: 1,
+                                getTitlesWidget: (value, meta) {
+                                  final index = value.toInt();
+                                  if (index >= 0 && index < stats.length) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 8.0),
+                                      child: Text(
+                                        stats[index].label,
+                                        style: TextStyle(
+                                          color: Colors.black54,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isMobile ? 8 : 10,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return const Text('');
+                                },
+                              ),
+                            ),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                interval: 1,
+                                getTitlesWidget: (value, meta) {
+                                  if (value % 1 == 0) {
+                                    return Text(
+                                      value.toInt().toString(),
+                                      style: const TextStyle(
+                                        color: Colors.black54,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    );
+                                  }
+                                  return const SizedBox();
+                                },
+                                reservedSize: 30,
+                              ),
+                            ),
+                          ),
+                          borderData: FlBorderData(show: false),
+                          minX: 0,
+                          maxX: (stats.length - 1).toDouble(),
+                          minY: 0,
+                          lineBarsData: [
+                            _buildLineChartBarData(
+                              stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.sosCount.toDouble())).toList(),
+                              Colors.red.shade700,
+                            ),
+                            _buildLineChartBarData(
+                              stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.injuredCount.toDouble())).toList(),
+                              Colors.amber.shade800,
+                            ),
+                            _buildLineChartBarData(
+                              stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.casualtyCount.toDouble())).toList(),
+                              Colors.grey,
+                            ),
+                            _buildLineChartBarData(
+                              stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.rescuedCount.toDouble())).toList(),
+                              Colors.green.shade700,
+                            ),
+                          ],
+                          lineTouchData: LineTouchData(
+                            enabled: true,
+                            touchSpotThreshold: 50,
+                            handleBuiltInTouches: true,
+                            getTouchLineStart: (data, index) => 0,
+                            getTouchLineEnd: (data, index) => double.infinity,
+                            touchTooltipData: LineTouchTooltipData(
+                              tooltipBgColor: Colors.black,
+                              tooltipRoundedRadius: 10,
+                              tooltipPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              tooltipMargin: 12,
+                              fitInsideHorizontally: true,
+                              fitInsideVertically: true,
+                              getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+                                return touchedBarSpots.map((barSpot) {
+                                  final flSpot = barSpot;
+                                  if (flSpot.x < 0 || flSpot.x >= stats.length) {
+                                    return null;
+                                  }
+                                  
+                                  String label = '';
+                                  Color color = Colors.white;
+                                  
+                                  switch (barSpot.barIndex) {
+                                    case 0:
+                                      label = 'SOS Alerts';
+                                      color = Colors.red.shade400;
+                                      break;
+                                    case 1:
+                                      label = 'Injured';
+                                      color = Colors.amber.shade400;
+                                      break;
+                                    case 2:
+                                      label = 'Casualties';
+                                      color = Colors.grey.shade300;
+                                      break;
+                                    case 3:
+                                      label = 'Rescued';
+                                      color = Colors.green.shade400;
+                                      break;
+                                  }
+
+                                  return LineTooltipItem(
+                                    '$label: ${flSpot.y.toInt()}',
+                                    TextStyle(
+                                      color: color,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black.withOpacity(0.5),
+                                          blurRadius: 2,
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList();
+                              },
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+              ),
             ),
           ],
         ),

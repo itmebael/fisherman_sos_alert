@@ -1084,22 +1084,42 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
               ],
             )
           else
-            Row(
+            Column(
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showLocationOnMap(context, alert),
-                    icon: const Icon(Icons.location_on, size: 18),
-                    label: const Text('View on Map'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showLocationOnMap(context, alert),
+                        icon: const Icon(Icons.location_on, size: 18),
+                        label: const Text('View on Map'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _deleteAlert(context, alert),
+                        icon: const Icon(Icons.delete, size: 18),
+                        label: const Text('Delete Record'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1327,6 +1347,92 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
             ),
           );
         }
+      }
+    }
+  }
+
+  Future<void> _deleteAlert(BuildContext context, Map<String, dynamic> alert) async {
+    final alertId = alert['id']?.toString();
+    if (alertId == null || alertId.isEmpty) return;
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Alert Record'),
+        content: const Text(
+          'Are you sure you want to delete this alert record? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // Show loading indicator
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Deleting alert record...'),
+            ],
+          ),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    try {
+      final success = await _databaseService.deleteSOSAlert(alertId);
+
+      if (success) {
+        // Wait a moment for database to update
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // Reload alerts to get updated data
+        await _loadAlerts();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Alert record deleted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception('Failed to delete alert record');
+      }
+    } catch (e) {
+      print('Error deleting alert: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
   }

@@ -149,18 +149,27 @@ class LiveLocationService {
   /// Update location to database
   Future<void> _updateLocationToDatabase(Position position, UserModel user) async {
     try {
-      await _databaseService.updateLiveLocation(
-        fishermanUid: user.id,
-        fishermanEmail: user.email,
-        fishermanDisplayId: user.id, // Use ID as display ID if not available
-        fishermanName: user.name,
-        latitude: position.latitude,
-        longitude: position.longitude,
-        accuracy: position.accuracy,
-        speed: position.speed,
-        heading: position.heading,
-        altitude: position.altitude,
-      );
+      if (user.userType == 'admin' || user.userType == 'coastguard') {
+        // Update admin/coastguard location
+        await _databaseService.updateCoastguardCurrentLocation(
+          latitude: position.latitude,
+          longitude: position.longitude,
+        );
+      } else {
+        // Update fisherman location
+        await _databaseService.updateLiveLocation(
+          fishermanUid: user.id,
+          fishermanEmail: user.email,
+          fishermanDisplayId: user.id, // Use ID as display ID if not available
+          fishermanName: user.name,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          accuracy: position.accuracy,
+          speed: position.speed,
+          heading: position.heading,
+          altitude: position.altitude,
+        );
+      }
     } catch (e) {
       print('Error updating location to database: $e');
       // Don't throw - just log error to avoid breaking location stream

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../constants/colors.dart';
 import '../admin/admin_drawer.dart';
 import '../../services/database_service.dart';
@@ -149,158 +149,117 @@ class _ReportsPageState extends State<ReportsPage> {
     return parts.isEmpty ? (report['weather']?.toString() ?? 'No weather data') : parts.join('\n');
   }
 
-  String _buildPrintableText() {
-    final buffer = StringBuffer();
-    buffer.writeln('RESCUE REPORTS');
-    buffer.writeln('Generated: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}');
+  Widget _buildProfileImage(Map<String, dynamic> report) {
+    final profileUrl = report['profile_image_url'] ?? 
+                       report['fisherman_profile_picture_url'] ?? 
+                       report['fisherman_profile_image_url'];
     
-    // Add Filter Summary
-    if (_statusFilter != 'All') buffer.writeln('Status Filter: $_statusFilter');
-    if (_dateRange != null) {
-      buffer.writeln('Date Range: ${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}');
-    }
-    if (_searchQuery.isNotEmpty) buffer.writeln('Search Query: "$_searchQuery"');
-    
-    buffer.writeln('Total Reports: ${_filteredReports.length}');
-    buffer.writeln('');
-    buffer.writeln('=' * 70);
-    buffer.writeln('');
-
-    for (int i = 0; i < _filteredReports.length; i++) {
-      final r = _filteredReports[i];
-      buffer.writeln('Report #${i + 1}');
-      buffer.writeln('ID: ${r['id']}');
-      buffer.writeln('Full Name: ${r['fullName'] ?? '-'}');
-      buffer.writeln('Status: ${r['status'] ?? '-'}');
-      buffer.writeln('Boat Name: ${r['boat_name'] ?? '-'}');
-      buffer.writeln('Distress Time: ${r['distressTime'] ?? '-'}');
-      buffer.writeln('Rescue Time: ${r['rescueTime'] ?? '-'}');
-      final distressDate = (r['distressTime'] ?? '-').toString();
-      final dateStr = distressDate.contains('T') ? distressDate.split('T').first : distressDate.split(' ').first;
-      buffer.writeln('Date: $dateStr');
-      
-      // Enhanced weather display
-      buffer.writeln('Weather Conditions on ${dateStr}:');
-      final weatherDetails = r['weatherDetails'] as Map<String, dynamic>?;
-      if (weatherDetails != null && weatherDetails.isNotEmpty) {
-        if (weatherDetails['temperature'] != null) {
-          buffer.writeln('  Temperature: ${weatherDetails['temperature']}°C');
-        }
-        if (weatherDetails['description'] != null) {
-          buffer.writeln('  Condition: ${weatherDetails['description']}');
-        }
-        if (weatherDetails['humidity'] != null) {
-          buffer.writeln('  Humidity: ${weatherDetails['humidity']}%');
-        }
-        if (weatherDetails['windSpeed'] != null) {
-          buffer.writeln('  Wind Speed: ${weatherDetails['windSpeed']} m/s');
-        }
-        if (weatherDetails['pressure'] != null) {
-          buffer.writeln('  Pressure: ${weatherDetails['pressure']} hPa');
-        }
-      } else {
-        buffer.writeln('  ${r['weather'] ?? 'No weather data available'}');
-      }
-      
-      buffer.writeln('Casualties: ${r['casualties'] ?? 0}');
-      buffer.writeln('Injured: ${r['injured'] ?? 0}');
-      buffer.writeln('');
-      buffer.writeln('-' * 70);
-      buffer.writeln('');
-    }
-
-    return buffer.toString();
-  }
-
-  Future<void> _viewReport() async {
-    if (_filteredReports.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No reports to view')),
-      );
-      return;
-    }
-
-    final text = _buildPrintableText();
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.analytics, color: AppColors.primaryColor),
-            const SizedBox(width: 8),
-            const Text('Rescue Reports'),
-          ],
+    if (profileUrl != null && profileUrl.toString().isNotEmpty) {
+      return Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.blue.withOpacity(0.3), width: 2),
         ),
-        content: SizedBox(
-          width: 700,
-          height: 600,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
+        child: ClipOval(
+          child: Image.network(
+            profileUrl.toString(),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
                 decoration: BoxDecoration(
-                  color: AppColors.homeBackground.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.blue.withOpacity(0.2),
+                  shape: BoxShape.circle,
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Total Reports: ${_filteredReports.length} | Generated: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now())}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
+                child: const Icon(
+                  Icons.person,
+                  color: Colors.blue,
+                  size: 24,
                 ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    text,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                  ),
+              );
+            },
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.2),
+                  shape: BoxShape.circle,
                 ),
-              ),
-            ],
+                child: const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            },
           ),
         ),
-        actions: [
-          TextButton.icon(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: text));
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Report copied to clipboard')),
-                );
-              }
-            },
-            icon: const Icon(Icons.copy),
-            label: const Text('Copy'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+      );
+    }
+    
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.2),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.blue.withOpacity(0.3), width: 2),
+      ),
+      child: const Icon(
+        Icons.person,
+        color: Colors.blue,
+        size: 24,
       ),
     );
   }
 
+  String _formatDateTime(dynamic dateTime) {
+    if (dateTime == null) return '-';
+    
+    try {
+      final dt = dateTime is DateTime 
+          ? dateTime 
+          : DateTime.tryParse(dateTime.toString());
+      
+      if (dt == null) return '-';
+      
+      return DateFormat('MMM d, y\nh:mm a').format(dt);
+    } catch (e) {
+      return '-';
+    }
+  }
+
+  String _getStatusLabel(dynamic status) {
+    if (status == null) return 'Active';
+    final statusStr = status.toString().toLowerCase();
+    
+    switch (statusStr) {
+      case 'inactive':
+      case 'rescued':
+      case 'resolved':
+        return 'Safe';
+      case 'on_the_way':
+        return 'On Way';
+      case 'active':
+      default:
+        return 'Active';
+    }
+  }
+
+
+
+
+
 
   String _buildCsv() {
     final buffer = StringBuffer();
-    buffer.writeln('ID,Full Name,Status,Boat Name,Date,Distress Time,Rescue Time,Temperature,Weather Condition,Humidity,Wind Speed,Pressure,Casualties,Injured');
+    buffer.writeln('ID,Full Name,Status,Boat Number,Distress Time,Rescue Time,Weather Condition,Temperature,Humidity,Wind Speed,Pressure,Casualties,Injured');
     for (final r in _filteredReports) {
       final id = (r['id'] ?? '').toString().replaceAll(',', ' ');
-      final name = (r['fullName'] ?? '').toString().replaceAll(',', ' ');
-      final status = (r['status'] ?? '').toString().replaceAll(',', ' ');
-      final boatName = (r['boat_name'] ?? '-').toString().replaceAll(',', ' ');
-      final distress = (r['distressTime'] ?? '').toString().replaceAll(',', ' ');
-      final distressDate = distress.contains('T') ? distress.split('T').first : distress.split(' ').first;
-      final rescue = (r['rescueTime'] ?? '-').toString().replaceAll(',', ' ');
+      final name = (r['fullName'] ?? r['fisherman_name'] ?? '').toString().replaceAll(',', ' ');
+      final status = _getStatusLabel(r['status']);
+      final boatNumber = (r['boat_name'] ?? r['boat_registration_number'] ?? '-').toString().replaceAll(',', ' ');
+      final distress = (r['distressTime'] ?? r['created_at'] ?? '').toString().replaceAll(',', ' ');
+      final rescue = (r['rescueTime'] ?? r['resolved_at'] ?? '-').toString().replaceAll(',', ' ');
       
       // Extract weather details
       final weatherDetails = r['weatherDetails'] as Map<String, dynamic>?;
@@ -312,7 +271,7 @@ class _ReportsPageState extends State<ReportsPage> {
       
       final casualties = (r['casualties'] ?? 0).toString();
       final injured = (r['injured'] ?? 0).toString();
-      buffer.writeln('$id,$name,$status,$boatName,$distressDate,$distress,$rescue,$temp,$condition,$humidity,$windSpeed,$pressure,$casualties,$injured');
+      buffer.writeln('$id,$name,$status,$boatNumber,$distress,$rescue,$condition,$temp,$humidity,$windSpeed,$pressure,$casualties,$injured');
     }
     return buffer.toString();
   }
@@ -669,8 +628,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                     children: [
                                       Expanded(flex: 1, child: Center(child: Text('Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 2, child: Center(child: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Boat Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
-                                      Expanded(flex: 2, child: Center(child: Text('Date', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Boat Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Distress Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Rescue Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 2, child: Center(child: Text('Weather', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 1, child: Center(child: Text('Casualties', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 1, child: Center(child: Text('Injured', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
@@ -706,19 +666,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                           Expanded(
                                                             flex: 1,
                                                             child: Center(
-                                                              child: Container(
-                                                                width: 32,
-                                                                height: 32,
-                                                                decoration: BoxDecoration(
-                                                                  color: Colors.blue.withOpacity(0.2),
-                                                                  borderRadius: BorderRadius.circular(16),
-                                                                ),
-                                                                child: const Icon(
-                                                                  Icons.person,
-                                                                  color: Colors.blue,
-                                                                  size: 20,
-                                                                ),
-                                                              ),
+                                                              child: _buildProfileImage(r),
                                                             ),
                                                           ),
                                                           // Full Name
@@ -726,7 +674,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                             flex: 2,
                                                             child: Center(
                                                               child: Text(
-                                                                (r['fullName'] ?? '-').toString(),
+                                                                (r['fullName'] ?? r['fisherman_name'] ?? '-').toString(),
                                                                 style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w500, fontSize: 12),
                                                                 textAlign: TextAlign.center,
                                                                 maxLines: 2,
@@ -734,7 +682,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               ),
                                                             ),
                                                           ),
-                                                          // Boat Name
+                                                          // Boat Number
                                                           Expanded(
                                                             flex: 2,
                                                             child: Center(
@@ -752,7 +700,7 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                     const SizedBox(width: 4),
                                                                     Flexible(
                                                                       child: Text(
-                                                                        (r['boat_name'] ?? '-').toString(),
+                                                                        (r['boat_name'] ?? r['boat_registration_number'] ?? '-').toString(),
                                                                         style: const TextStyle(
                                                                           color: AppColors.textPrimary,
                                                                           fontSize: 10,
@@ -768,14 +716,35 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               ),
                                                             ),
                                                           ),
-                                                          // Date
+                                                          // Distress Time
                                                           Expanded(
                                                             flex: 2,
                                                             child: Center(
-                                                              child: Text(
-                                                                (r['distressTime'] ?? '-').toString().split('T').first,
-                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
-                                                                textAlign: TextAlign.center,
+                                                              child: Tooltip(
+                                                                message: r['distressTime']?.toString() ?? '-',
+                                                                child: Text(
+                                                                  _formatDateTime(r['distressTime'] ?? r['created_at']),
+                                                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 10),
+                                                                  textAlign: TextAlign.center,
+                                                                  maxLines: 2,
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Rescue Time
+                                                          Expanded(
+                                                            flex: 2,
+                                                            child: Center(
+                                                              child: Tooltip(
+                                                                message: r['rescueTime']?.toString() ?? r['resolved_at']?.toString() ?? '-',
+                                                                child: Text(
+                                                                  _formatDateTime(r['rescueTime'] ?? r['resolved_at']),
+                                                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 10),
+                                                                  textAlign: TextAlign.center,
+                                                                  maxLines: 2,
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
                                                               ),
                                                             ),
                                                           ),
@@ -839,25 +808,29 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               child: Container(
                                                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                                 decoration: BoxDecoration(
-                                                                  color: (r['status'] == 'inactive' ? Colors.green : Colors.red).withOpacity(0.1),
+                                                                  color: (r['status'] == 'inactive' || r['status'] == 'rescued' || r['status'] == 'resolved' ? Colors.green : Colors.red).withOpacity(0.1),
                                                                   borderRadius: BorderRadius.circular(12),
-                                                                  border: Border.all(color: (r['status'] == 'inactive' ? Colors.green : Colors.red).withOpacity(0.3)),
+                                                                  border: Border.all(color: (r['status'] == 'inactive' || r['status'] == 'rescued' || r['status'] == 'resolved' ? Colors.green : Colors.red).withOpacity(0.3)),
                                                                 ),
                                                                 child: Row(
                                                                   mainAxisSize: MainAxisSize.min,
                                                                   children: [
                                                                     Icon(
-                                                                      r['status'] == 'inactive' ? Icons.check_circle : Icons.warning,
-                                                                      color: r['status'] == 'inactive' ? Colors.green : Colors.red,
+                                                                      (r['status'] == 'inactive' || r['status'] == 'rescued' || r['status'] == 'resolved') ? Icons.check_circle : Icons.warning,
+                                                                      color: (r['status'] == 'inactive' || r['status'] == 'rescued' || r['status'] == 'resolved') ? Colors.green : Colors.red,
                                                                       size: 10,
                                                                     ),
                                                                     const SizedBox(width: 2),
-                                                                    Text(
-                                                                      r['status'] == 'inactive' ? 'Safe' : 'Active',
-                                                                      style: TextStyle(
-                                                                        color: r['status'] == 'inactive' ? Colors.green : Colors.red,
-                                                                        fontSize: 9,
-                                                                        fontWeight: FontWeight.w600,
+                                                                    Flexible(
+                                                                      child: Text(
+                                                                        _getStatusLabel(r['status']),
+                                                                        style: TextStyle(
+                                                                          color: (r['status'] == 'inactive' || r['status'] == 'rescued' || r['status'] == 'resolved') ? Colors.green : Colors.red,
+                                                                          fontSize: 9,
+                                                                          fontWeight: FontWeight.w600,
+                                                                        ),
+                                                                        maxLines: 1,
+                                                                        overflow: TextOverflow.ellipsis,
                                                                       ),
                                                                     ),
                                                                   ],

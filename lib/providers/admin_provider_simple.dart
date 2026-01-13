@@ -291,45 +291,63 @@ class AdminProviderSimple with ChangeNotifier {
       List<EmergencyStatPoint> stats = [];
 
       if (filter == 'Daily') {
-        // Last 24 hours, grouped by 4-hour intervals
-        // Buckets: 0-4, 4-8, 8-12, 12-16, 16-20, 20-24
-        final Map<int, Map<String, int>> buckets = {};
-        for (int i = 0; i <= 20; i += 4) {
-          buckets[i] = {'sos': 0, 'injured': 0, 'casualty': 0, 'rescued': 0};
+        // Show days of the current week: Monday, Tuesday, Wednesday, etc.
+        stats = [];
+        
+        // Calculate current week boundaries (Monday to Sunday)
+        final daysFromMonday = now.weekday - 1;
+        final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: daysFromMonday));
+        final weekEnd = weekStart.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+        
+        // Initialize all days of the week
+        final Map<int, Map<String, int>> dayBuckets = {};
+        for (int day = 1; day <= 7; day++) {
+          dayBuckets[day] = {'sos': 0, 'injured': 0, 'casualty': 0, 'rescued': 0};
         }
 
         for (final alert in alerts) {
           final created = DateTime.parse(alert['created_at'].toString());
-          if (now.difference(created).inHours > 24) continue;
           
-          final hour = created.hour;
-          final bucketKey = (hour ~/ 4) * 4;
+          // Only include alerts from the current week
+          if (created.isBefore(weekStart) || created.isAfter(weekEnd)) continue;
           
-          _aggregateAlertToBucket(buckets[bucketKey]!, alert);
+          final weekday = created.weekday; // 1=Monday, 7=Sunday
+          _aggregateAlertToBucket(dayBuckets[weekday]!, alert);
         }
 
-        buckets.forEach((key, value) {
+        // Add stats in order: Mon, Tue, Wed, Thu, Fri, Sat, Sun
+        for (int day = 1; day <= 7; day++) {
+          final dayLabel = _getDayLabel(day);
           stats.add(EmergencyStatPoint(
-            label: '${key.toString().padLeft(2, '0')}:00',
-            sosCount: value['sos']!,
-            injuredCount: value['injured']!,
-            casualtyCount: value['casualty']!,
-            rescuedCount: value['rescued']!,
+            label: dayLabel,
+            sosCount: dayBuckets[day]!['sos']!,
+            injuredCount: dayBuckets[day]!['injured']!,
+            casualtyCount: dayBuckets[day]!['casualty']!,
+            rescuedCount: dayBuckets[day]!['rescued']!,
           ));
-        });
+        }
 
       } else if (filter == 'Weekly') {
-        // Last 7 days
+        // Show Week 1, Week 2, Week 3, etc. (last 4-8 weeks)
         stats = [];
-        for (int i = 6; i >= 0; i--) {
-          final date = now.subtract(Duration(days: i));
-          final dayLabel = _getDayLabel(date.weekday);
+        final int numberOfWeeks = 8; // Show last 8 weeks
+        
+        for (int i = numberOfWeeks - 1; i >= 0; i--) {
+          // Calculate week boundaries
+          final weekEnd = now.subtract(Duration(days: i * 7));
+          final weekStart = weekEnd.subtract(const Duration(days: 6));
           
+          // Set to start and end of day
+          final weekStartDay = DateTime(weekStart.year, weekStart.month, weekStart.day);
+          final weekEndDay = DateTime(weekEnd.year, weekEnd.month, weekEnd.day, 23, 59, 59);
+
           int sos = 0, injured = 0, casualty = 0, rescued = 0;
 
           for (final alert in alerts) {
             final created = DateTime.parse(alert['created_at'].toString());
-            if (created.year == date.year && created.month == date.month && created.day == date.day) {
+            // Check if alert is within this week
+            if (created.isAfter(weekStartDay.subtract(const Duration(seconds: 1))) && 
+                created.isBefore(weekEndDay.add(const Duration(seconds: 1)))) {
               sos++;
               final status = alert['status']?.toString().toLowerCase() ?? 'active';
               if (status == 'rescued' || status == 'resolved' || status == 'inactive') rescued++;
@@ -338,9 +356,9 @@ class AdminProviderSimple with ChangeNotifier {
               casualty += (alert['casualties'] as int? ?? 0);
             }
           }
-          
+
           stats.add(EmergencyStatPoint(
-            label: dayLabel,
+            label: 'Week ${numberOfWeeks - i}',
             sosCount: sos,
             injuredCount: injured,
             casualtyCount: casualty,
@@ -349,49 +367,35 @@ class AdminProviderSimple with ChangeNotifier {
         }
 
       } else if (filter == 'Monthly') {
-        // Last 30 days, grouped by weeks (approx 4 weeks)
-        stats = [];
-        for (int i = 3; i >= 0; i--) {
-          final weekStart = now.subtract(Duration(days: i * 7 + 6));
-          final weekEnd = now.subtract(Duration(days: i * 7));
-          // Format: StartDay-EndDay
-
-          int sos = 0, injured = 0, casualty = 0, rescued = 0;
-
-          for (final alert in alerts) {
-            final created = DateTime.parse(alert['created_at'].toString());
-            if (created.isAfter(weekStart.subtract(const Duration(seconds: 1))) && 
-                created.isBefore(weekEnd.add(const Duration(days: 1)))) {
-              sos++;
-              final status = alert['status']?.toString().toLowerCase() ?? 'active';
-              if (status == 'rescued' || status == 'resolved' || status == 'inactive') rescued++;
-              
-              injured += (alert['injured'] as int? ?? 0);
-              casualty += (alert['casualties'] as int? ?? 0);
-            }
-          }
-
-          stats.add(EmergencyStatPoint(
-            label: 'Week ${4-i}',
-            sosCount: sos,
-            injuredCount: injured,
-            casualtyCount: casualty,
-            rescuedCount: rescued,
-          ));
-        }
-
-      } else if (filter == 'Yearly') {
-        // Last 12 months
+        // Show months: January, February, March, etc. (last 12 months)
         stats = [];
         for (int i = 11; i >= 0; i--) {
-          final date = DateTime(now.year, now.month - i, 1);
-          final monthLabel = _getMonthLabel(date.month);
+          // Calculate month correctly, handling year rollover
+          int targetYear = now.year;
+          int targetMonth = now.month - i;
+          while (targetMonth < 1) {
+            targetMonth += 12;
+            targetYear -= 1;
+          }
+          while (targetMonth > 12) {
+            targetMonth -= 12;
+            targetYear += 1;
+          }
+          
+          final monthStart = DateTime(targetYear, targetMonth, 1);
+          final monthEnd = targetMonth == 12 
+              ? DateTime(targetYear + 1, 1, 1).subtract(const Duration(seconds: 1))
+              : DateTime(targetYear, targetMonth + 1, 1).subtract(const Duration(seconds: 1));
+          
+          final monthLabel = _getMonthLabel(targetMonth);
           
           int sos = 0, injured = 0, casualty = 0, rescued = 0;
 
           for (final alert in alerts) {
             final created = DateTime.parse(alert['created_at'].toString());
-            if (created.year == date.year && created.month == date.month) {
+            // Check if alert is within this month
+            if (created.isAfter(monthStart.subtract(const Duration(seconds: 1))) && 
+                created.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
               sos++;
               final status = alert['status']?.toString().toLowerCase() ?? 'active';
               if (status == 'rescued' || status == 'resolved' || status == 'inactive') rescued++;
@@ -403,6 +407,43 @@ class AdminProviderSimple with ChangeNotifier {
           
           stats.add(EmergencyStatPoint(
             label: monthLabel,
+            sosCount: sos,
+            injuredCount: injured,
+            casualtyCount: casualty,
+            rescuedCount: rescued,
+          ));
+        }
+
+      } else if (filter == 'Yearly') {
+        // Show years: 2023, 2024, 2025, etc. (from 2023 to current year)
+        stats = [];
+        final int startYear = 2023;
+        final int currentYear = now.year;
+        final int numberOfYears = currentYear - startYear + 1;
+        
+        for (int i = 0; i < numberOfYears; i++) {
+          final targetYear = startYear + i;
+          final yearStart = DateTime(targetYear, 1, 1);
+          final yearEnd = DateTime(targetYear + 1, 1, 1).subtract(const Duration(seconds: 1));
+          
+          int sos = 0, injured = 0, casualty = 0, rescued = 0;
+
+          for (final alert in alerts) {
+            final created = DateTime.parse(alert['created_at'].toString());
+            // Check if alert is within this year
+            if (created.isAfter(yearStart.subtract(const Duration(seconds: 1))) && 
+                created.isBefore(yearEnd.add(const Duration(seconds: 1)))) {
+              sos++;
+              final status = alert['status']?.toString().toLowerCase() ?? 'active';
+              if (status == 'rescued' || status == 'resolved' || status == 'inactive') rescued++;
+              
+              injured += (alert['injured'] as int? ?? 0);
+              casualty += (alert['casualties'] as int? ?? 0);
+            }
+          }
+          
+          stats.add(EmergencyStatPoint(
+            label: targetYear.toString(),
             sosCount: sos,
             injuredCount: injured,
             casualtyCount: casualty,

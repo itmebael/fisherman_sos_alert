@@ -437,18 +437,20 @@ class _SOSButtonState extends State<SOSButton> with TickerProviderStateMixin {
           ),
           title: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.warning_amber_rounded,
                 color: Colors.red,
                 size: 28,
               ),
               const SizedBox(width: 12),
-              const Text(
-                'Emergency SOS Alert',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red,
+              Expanded(
+                child: const Text(
+                  'Emergency SOS Alert',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
                 ),
               ),
             ],

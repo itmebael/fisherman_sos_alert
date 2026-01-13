@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart' as latlong;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/database_service.dart';
 import '../../services/boundary_service.dart';
 import '../../services/location_service.dart';
@@ -50,6 +51,8 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
   final Map<String, Timer> _alertRepeatTimers = {};
   final Set<String> _dismissedAlertIds = <String>{};
   final Set<String> _activeAlertDialogs = <String>{};
+  bool _isMyRescueActive = false;
+  StreamSubscription? _mySOSSubscription;
 
   @override
   void initState() {
@@ -65,6 +68,11 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     }
     // Always start live locations stream for active fishermen (for fisherman map)
     _startLiveLocationsStream();
+    
+    // Monitor my SOS status for fisherman view
+    if (!widget.showSOSAlerts) {
+      _startMySOSStream();
+    }
   }
 
   @override
@@ -484,6 +492,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     _locationSubscription?.cancel();
     _adminLocationsSubscription?.cancel();
     _liveLocationsSubscription?.cancel();
+    _mySOSSubscription?.cancel();
     _audioPlayer.dispose();
     for (final t in _alertRepeatTimers.values) {
       t.cancel();
@@ -492,6 +501,25 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
     _dismissedAlertIds.clear();
     _activeAlertDialogs.clear();
     super.dispose();
+  }
+
+  void _startMySOSStream() {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    _mySOSSubscription?.cancel();
+    _mySOSSubscription = DatabaseService()
+        .getFishermanSOSStream(user.id)
+        .listen((alerts) {
+      if (!mounted) return;
+      // Check if any alert is 'on_the_way'
+      final hasActiveRescue = alerts.any((alert) => alert['status'] == 'on_the_way');
+      if (_isMyRescueActive != hasActiveRescue) {
+        setState(() {
+          _isMyRescueActive = hasActiveRescue;
+        });
+      }
+    });
   }
 
   void _startAdminLocationsStream() {
@@ -657,10 +685,10 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                             children: [
                               TileLayer(
                                 urlTemplate:
-                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                                 userAgentPackageName:
                                     'com.example.fisherman_sos_alert',
-                                maxZoom: 18,
+                                maxZoom: 19,
                                 errorTileCallback: (tile, error, stackTrace) {
                                   print(
                                     'Tile loading error at ${tile.coordinates}: $error',
@@ -762,10 +790,10 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                         children: [
                           TileLayer(
                             urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                             userAgentPackageName:
                                 'com.example.fisherman_sos_alert',
-                            maxZoom: 18,
+                            maxZoom: 19,
                             errorTileCallback: (tile, error, stackTrace) {
                               print(
                                 'Tile loading error at ${tile.coordinates}: $error',
@@ -902,27 +930,27 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                       children: [
                         TileLayer(
                           urlTemplate:
-                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                           userAgentPackageName:
                               'com.example.fisherman_sos_alert',
-                          maxZoom: 18,
+                          maxZoom: 19,
                         ),
                         // Add boundary polygons only if showBoundaries is true
                         if (widget.showBoundaries && boundaries.isNotEmpty)
                           PolygonLayer(
                             polygons: _buildBoundaryPolygons(boundaries),
                           ),
-                        if (_currentUserLatLng != null)
-                          MarkerLayer(markers: _buildUserMarkers()),
-                        // Show active fishermen on fisherman map
+                        // Show live fishermen locations
                         if (_liveFishermenLocations.isNotEmpty)
                           MarkerLayer(
                             markers: _buildLiveLocationMarkers(
                               _liveFishermenLocations,
                             ),
                           ),
-                        // Show admin markers on fisherman map
-                        if (widget.showAdminLocations)
+                        if (_currentUserLatLng != null)
+                          MarkerLayer(markers: _buildUserMarkers()),
+                        // Only show admin markers if rescue is active
+                        if (widget.showAdminLocations && _isMyRescueActive)
                           MarkerLayer(markers: _buildAdminMarkers()),
                       ],
                     ),
@@ -989,9 +1017,9 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                   children: [
                     TileLayer(
                       urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                       userAgentPackageName: 'com.example.fisherman_sos_alert',
-                      maxZoom: 18,
+                      maxZoom: 19,
                       errorTileCallback: (tile, error, stackTrace) {
                         print(
                           'Tile loading error at ${tile.coordinates}: $error',
@@ -1002,16 +1030,8 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                       MarkerLayer(markers: _buildUserMarkers()),
                     if (_searchedLocation != null)
                       MarkerLayer(markers: _buildSearchedLocationMarker()),
-                    if (widget.showAdminLocations)
+                    if (widget.showAdminLocations && _isMyRescueActive)
                       MarkerLayer(markers: _buildAdminMarkers()),
-                    // Show active fishermen on fisherman map
-                    if (!widget.showSOSAlerts &&
-                        _liveFishermenLocations.isNotEmpty)
-                      MarkerLayer(
-                        markers: _buildLiveLocationMarkers(
-                          _liveFishermenLocations,
-                        ),
-                      ),
                   ],
                 ),
                 Positioned(

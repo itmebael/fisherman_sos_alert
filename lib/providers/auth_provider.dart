@@ -23,6 +23,11 @@ class AuthProvider with ChangeNotifier {
   bool get isAdmin => _currentUser?.userType == 'coastguard';
   bool get isFisherman => _currentUser?.userType == 'fisherman';
 
+  // Force refresh UI
+  void forceRefresh() {
+    notifyListeners();
+  }
+
   // Initialize auth state listener (keeps app synced with auth state)
   void initializeAuthListener() {
     _authService.authStateChanges.listen((data) async {
@@ -204,6 +209,19 @@ class AuthProvider with ChangeNotifier {
       _currentUser = null;
       _supabaseUser = null;
       notifyListeners();
+    }
+  }
+
+  // Reload user data
+  Future<void> reloadUser() async {
+    try {
+      if (_currentUser != null) {
+        await _authService.fetchUserData(_currentUser!.id);
+        _currentUser = _authService.currentUser;
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error reloading user data: $e');
     }
   }
 

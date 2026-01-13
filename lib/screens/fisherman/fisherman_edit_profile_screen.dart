@@ -93,14 +93,10 @@ class _FishermanEditProfileScreenState extends State<FishermanEditProfileScreen>
         throw Exception('Failed to update profile: ${response.error!.message}');
       }
 
-      // Update local user data - reload user from Supabase
-      final updatedUser = await supabase.auth.getUser();
-      if (updatedUser.user != null) {
-        // Update the auth provider with new user data
-        // This will trigger a rebuild of the UI
-        // ignore: invalid_use_of_protected_member
-        auth.notifyListeners();
-      }
+      // Update local user data
+      await auth.reloadUser();
+      
+      auth.forceRefresh();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
