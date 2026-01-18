@@ -236,7 +236,7 @@ class _ReportsPageState extends State<ReportsPage> {
       case 'inactive':
       case 'rescued':
       case 'resolved':
-        return 'Safe';
+        return 'Rescued';
       case 'on_the_way':
         return 'On Way';
       case 'active':
@@ -252,7 +252,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
   String _buildCsv() {
     final buffer = StringBuffer();
-    buffer.writeln('ID,Full Name,Status,Boat Number,Distress Time,Rescue Time,Weather Condition,Temperature,Humidity,Wind Speed,Pressure,Casualties,Injured');
+    buffer.writeln('ID,Full Name,Status,Boat Number,Distress Time,Rescue Time,Weather Condition,Temperature,Humidity,Wind Speed,Pressure,Casualties,Injured,Missing,Total Onboard');
     for (final r in _filteredReports) {
       final id = (r['id'] ?? '').toString().replaceAll(',', ' ');
       final name = (r['fullName'] ?? r['fisherman_name'] ?? '').toString().replaceAll(',', ' ');
@@ -271,7 +271,9 @@ class _ReportsPageState extends State<ReportsPage> {
       
       final casualties = (r['casualties'] ?? 0).toString();
       final injured = (r['injured'] ?? 0).toString();
-      buffer.writeln('$id,$name,$status,$boatNumber,$distress,$rescue,$condition,$temp,$humidity,$windSpeed,$pressure,$casualties,$injured');
+      final missing = (r['missing'] ?? 0).toString();
+      final totalOnboard = (r['total_onboard'] ?? 0).toString();
+      buffer.writeln('$id,$name,$status,$boatNumber,$distress,$rescue,$condition,$temp,$humidity,$windSpeed,$pressure,$casualties,$injured,$missing,$totalOnboard');
     }
     return buffer.toString();
   }
@@ -279,40 +281,198 @@ class _ReportsPageState extends State<ReportsPage> {
   Future<void> _exportCsv() async {
     if (_filteredReports.isEmpty) return;
     
-    // Show confirmation dialog before downloading
+    // Show preview dialog with data that will be exported
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Download Excel Report'),
-        content: const Text('Are you sure you want to download the rescue reports as CSV/Excel file?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.8,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Export Preview',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context, false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The following ${_filteredReports.length} report(s) will be exported:',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SingleChildScrollView(
+                      child: DataTable(
+                        headingRowColor: MaterialStateProperty.all(Colors.grey.shade100),
+                        columns: const [
+                          DataColumn(label: Text('ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Boat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Distress Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Rescue Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Casualties', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Injured', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Missing', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Onboard', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                        ],
+                        rows: _filteredReports.take(50).map((r) {
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(
+                                (r['id'] ?? '').toString().length > 10
+                                    ? '${(r['id'] ?? '').toString().substring(0, 10)}...'
+                                    : (r['id'] ?? '').toString(),
+                                style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                (r['fullName'] ?? r['fisherman_name'] ?? '-').toString(),
+                                style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                _getStatusLabel(r['status']),
+                                style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                (r['boat_name'] ?? r['boat_registration_number'] ?? '-').toString(),
+                                style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                _formatDateTime(r['distressTime'] ?? r['created_at']).replaceAll('\n', ' '),
+                                style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                _formatDateTime(r['rescueTime'] ?? r['resolved_at']).replaceAll('\n', ' '),
+                                style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                (r['casualties'] ?? 0).toString(),
+                                style: const TextStyle(fontSize: 11, color: Colors.red),
+                              )),
+                              DataCell(Text(
+                                (r['injured'] ?? 0).toString(),
+                                style: const TextStyle(fontSize: 11, color: Colors.orange),
+                              )),
+                              DataCell(Text(
+                                (r['missing'] ?? 0).toString(),
+                                style: const TextStyle(fontSize: 11, color: Colors.amber),
+                              )),
+                              DataCell(Text(
+                                (r['total_onboard'] ?? 0).toString(),
+                                style: const TextStyle(fontSize: 11, color: Colors.blue),
+                              )),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (_filteredReports.length > 50)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '... and ${_filteredReports.length - 50} more report(s)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Export'),
+                  ),
+                ],
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Download'),
-          ),
-        ],
+        ),
       ),
     );
     
     if (confirmed != true) return;
     
+    // Show exporting message
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            SizedBox(width: 16),
+            Text('Exporting documents...'),
+          ],
+        ),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    
+    // Build CSV and save
     final csv = _buildCsv();
     final saver = getCsvSaver();
     final result = await saver.saveCsv(filename: 'rescue_reports.csv', csvContent: csv);
     if (!mounted) return;
+    
+    // Show success or error message
     final msg = result.success
-        ? (result.message ?? (kIsWeb ? 'Download started' : 'Saved'))
-        : (result.message ?? 'Failed to save');
+        ? (result.message ?? (kIsWeb ? 'Export started' : 'Document exported successfully'))
+        : (result.message ?? 'Failed to export document');
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: result.success ? Colors.green : Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
@@ -392,20 +552,23 @@ class _ReportsPageState extends State<ReportsPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-              // Filters and Download Section
+              // Filters and Export Section
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Title and Export Button Row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Text(
                           'Rescue Reports',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         ElevatedButton.icon(
@@ -417,156 +580,255 @@ class _ReportsPageState extends State<ReportsPage> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
+                            elevation: 2,
                           ),
-                          icon: const Icon(Icons.download, size: 20),
-                          label: const Text('Download Report'),
+                          icon: const Icon(Icons.download, size: 18),
+                          label: const Text('Export Report', style: TextStyle(fontSize: 14)),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
+                    const SizedBox(height: 20),
+                    // Filters Row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Date Range Filter
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.whiteColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.shade300),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
+                        // Left Column - Date Filters
+                        Expanded(
+                          flex: 1,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Start Date Filter
+                              Row(
+                                children: [
+                                  Text(
+                                    'Start Date:',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: AppColors.whiteColor,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                      ),
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(8),
+                                          onTap: () async {
+                                            final picked = await showDatePicker(
+                                              context: context,
+                                              firstDate: DateTime(2020),
+                                              lastDate: DateTime.now(),
+                                              initialDate: _dateRange?.start ?? DateTime.now(),
+                                              builder: (context, child) {
+                                                return Theme(
+                                                  data: Theme.of(context).copyWith(
+                                                    colorScheme: ColorScheme.light(
+                                                      primary: AppColors.primaryColor,
+                                                      onPrimary: Colors.white,
+                                                      surface: Colors.white,
+                                                      onSurface: Colors.black,
+                                                    ),
+                                                    datePickerTheme: DatePickerThemeData(
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(16),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  child: child!,
+                                                );
+                                              },
+                                            );
+                                            if (picked != null) {
+                                              setState(() {
+                                                _dateRange = DateTimeRange(
+                                                  start: picked,
+                                                  end: _dateRange?.end ?? picked,
+                                                );
+                                              });
+                                            }
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    _dateRange == null
+                                                        ? 'MM/DD/YYYY'
+                                                        : DateFormat('MM/dd/yyyy').format(_dateRange!.start),
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      color: _dateRange == null ? Colors.grey.shade400 : AppColors.textPrimary,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Icon(
+                                                  Icons.calendar_today,
+                                                  size: 18,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              // End Date Filter
+                              Row(
+                                children: [
+                                  Text(
+                                    'End Date:',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: AppColors.whiteColor,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                      ),
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(8),
+                                          onTap: () async {
+                                            final picked = await showDatePicker(
+                                              context: context,
+                                              firstDate: _dateRange?.start ?? DateTime(2020),
+                                              lastDate: DateTime.now(),
+                                              initialDate: _dateRange?.end ?? DateTime.now(),
+                                              builder: (context, child) {
+                                                return Theme(
+                                                  data: Theme.of(context).copyWith(
+                                                    colorScheme: ColorScheme.light(
+                                                      primary: AppColors.primaryColor,
+                                                      onPrimary: Colors.white,
+                                                      surface: Colors.white,
+                                                      onSurface: Colors.black,
+                                                    ),
+                                                    datePickerTheme: DatePickerThemeData(
+                                                      shape: RoundedRectangleBorder(
+                                                        borderRadius: BorderRadius.circular(16),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  child: child!,
+                                                );
+                                              },
+                                            );
+                                            if (picked != null) {
+                                              setState(() {
+                                                _dateRange = DateTimeRange(
+                                                  start: _dateRange?.start ?? picked,
+                                                  end: picked,
+                                                );
+                                              });
+                                            }
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    _dateRange == null
+                                                        ? 'MM/DD/YYYY'
+                                                        : DateFormat('MM/dd/yyyy').format(_dateRange!.end),
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      color: _dateRange == null ? Colors.grey.shade400 : AppColors.textPrimary,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Icon(
+                                                  Icons.calendar_today,
+                                                  size: 18,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (_dateRange != null) ...[
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                                      onPressed: () => setState(() => _dateRange = null),
+                                      tooltip: 'Clear date filter',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ],
                           ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () async {
-                                final picked = await showDateRangePicker(
-                                  context: context,
-                                  firstDate: DateTime(2020),
-                                  lastDate: DateTime.now(),
-                                  initialDateRange: _dateRange,
-                                  builder: (context, child) {
-                                    return Theme(
-                                      data: Theme.of(context).copyWith(
-                                        colorScheme: ColorScheme.light(
-                                          primary: AppColors.primaryColor,
-                                          onPrimary: Colors.white,
-                                          surface: Colors.white,
-                                          onSurface: Colors.black,
-                                        ),
-                                        datePickerTheme: DatePickerThemeData(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                        ),
-                                      ),
-                                      child: child!,
-                                    );
-                                  },
-                                );
-                                if (picked != null) {
-                                  setState(() => _dateRange = picked);
-                                }
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primaryColor.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Icon(
-                                        Icons.calendar_month_rounded,
-                                        size: 20,
-                                        color: AppColors.primaryColor,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Date Range',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey.shade600,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        Text(
-                                          _dateRange == null
-                                              ? 'All Dates'
-                                              : '${DateFormat('MMM d').format(_dateRange!.start)} - ${DateFormat('MMM d').format(_dateRange!.end)}',
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.textPrimary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(width: 12),
-                                    if (_dateRange != null)
-                                      IconButton(
-                                        icon: const Icon(Icons.close, size: 18, color: Colors.grey),
-                                        onPressed: () => setState(() => _dateRange = null),
-                                        constraints: const BoxConstraints(),
-                                        padding: EdgeInsets.zero,
-                                        tooltip: 'Clear filter',
-                                      )
-                                    else
-                                      const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey),
-                                  ],
+                        ),
+                        const SizedBox(width: 16),
+                        // Right Column - Status and Search
+                        Expanded(
+                          flex: 1,
+                          child: Row(
+                            children: [
+                              // Status Filter
+                              Expanded(
+                                flex: 1,
+                                child: DropdownButtonFormField<String>(
+                                  value: _statusFilter,
+                                  decoration: InputDecoration(
+                                    labelText: 'Status',
+                                    prefixIcon: const Icon(Icons.filter_alt, size: 20),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    isDense: true,
+                                    filled: true,
+                                    fillColor: AppColors.whiteColor,
+                                  ),
+                                  items: ['All', 'Active', 'Safe']
+                                      .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 14))))
+                                      .toList(),
+                                  onChanged: (v) => setState(() => _statusFilter = v!),
                                 ),
                               ),
-                            ),
-                          ),
-                        ),
-
-                        // Status Filter
-                        SizedBox(
-                          width: 200,
-                          child: DropdownButtonFormField<String>(
-                            value: _statusFilter,
-                            decoration: InputDecoration(
-                              labelText: 'Status',
-                              prefixIcon: const Icon(Icons.filter_alt, size: 20),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              isDense: true,
-                            ),
-                            items: ['All', 'Active', 'Safe']
-                                .map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 14))))
-                                .toList(),
-                            onChanged: (v) => setState(() => _statusFilter = v!),
-                          ),
-                        ),
-
-                        // Search
-                        SizedBox(
-                          width: 300,
-                          child: TextField(
-                            onChanged: (v) => setState(() => _searchQuery = v),
-                            decoration: InputDecoration(
-                              labelText: 'Search',
-                              hintText: 'Name, Boat, or ID',
-                              prefixIcon: const Icon(Icons.search, size: 20),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              isDense: true,
-                            ),
-                            style: const TextStyle(fontSize: 14),
+                              const SizedBox(width: 12),
+                              // Search
+                              Expanded(
+                                flex: 1,
+                                child: TextField(
+                                  onChanged: (v) => setState(() => _searchQuery = v),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search',
+                                    prefixIcon: const Icon(Icons.search, size: 20),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    isDense: true,
+                                    filled: true,
+                                    fillColor: AppColors.whiteColor,
+                                  ),
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -634,6 +896,8 @@ class _ReportsPageState extends State<ReportsPage> {
                                       Expanded(flex: 2, child: Center(child: Text('Weather', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 1, child: Center(child: Text('Casualties', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 1, child: Center(child: Text('Injured', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Missing', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Onboard', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 1, child: Center(child: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                     ],
                                   ),
@@ -798,6 +1062,26 @@ class _ReportsPageState extends State<ReportsPage> {
                                                               child: Text(
                                                                 (r['injured'] ?? 0).toString(),
                                                                 style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Missing
+                                                          Expanded(
+                                                            flex: 1,
+                                                            child: Center(
+                                                              child: Text(
+                                                                (r['missing'] ?? 0).toString(),
+                                                                style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Total Onboard
+                                                          Expanded(
+                                                            flex: 1,
+                                                            child: Center(
+                                                              child: Text(
+                                                                (r['total_onboard'] ?? 0).toString(),
+                                                                style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 12),
                                                               ),
                                                             ),
                                                           ),

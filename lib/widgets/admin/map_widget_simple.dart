@@ -701,8 +701,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                                 PolygonLayer(
                                   polygons: _buildBoundaryPolygons(boundaries),
                                 ),
-                              MarkerLayer(markers: _buildMarkers(alerts)),
-                              // Live locations stream
+                              // Live locations stream (render first, so SOS alerts appear on top)
                               StreamBuilder<List<Map<String, dynamic>>>(
                                 stream: DatabaseService()
                                     .getLiveLocationsStream(),
@@ -722,6 +721,8 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                                 MarkerLayer(
                                   markers: _buildSearchedLocationMarker(),
                                 ),
+                              // SOS alert markers rendered last so they appear on top
+                              MarkerLayer(markers: _buildMarkers(alerts)),
                             ],
                           ),
                           // Map title overlay
@@ -800,8 +801,7 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                               );
                             },
                           ),
-                          MarkerLayer(markers: _buildMarkers(alerts)),
-                          // Live locations stream
+                          // Live locations stream (render first, so SOS alerts appear on top)
                           StreamBuilder<List<Map<String, dynamic>>>(
                             stream: DatabaseService().getLiveLocationsStream(),
                             builder: (context, liveLocationSnapshot) {
@@ -830,6 +830,8 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                                 _liveFishermenLocations,
                               ),
                             ),
+                          // SOS alert markers rendered last so they appear on top
+                          MarkerLayer(markers: _buildMarkers(alerts)),
                         ],
                       ),
                       Positioned(
@@ -940,17 +942,23 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
                           PolygonLayer(
                             polygons: _buildBoundaryPolygons(boundaries),
                           ),
-                        // Show live fishermen locations
-                        if (_liveFishermenLocations.isNotEmpty)
-                          MarkerLayer(
-                            markers: _buildLiveLocationMarkers(
-                              _liveFishermenLocations,
-                            ),
-                          ),
+                        // Show live fishermen locations stream
+                        StreamBuilder<List<Map<String, dynamic>>>(
+                          stream: DatabaseService().getLiveLocationsStream(),
+                          builder: (context, liveLocationSnapshot) {
+                            final liveLocations =
+                                liveLocationSnapshot.data ?? [];
+                            return MarkerLayer(
+                              markers: _buildLiveLocationMarkers(
+                                liveLocations,
+                              ),
+                            );
+                          },
+                        ),
                         if (_currentUserLatLng != null)
                           MarkerLayer(markers: _buildUserMarkers()),
-                        // Only show admin markers if rescue is active
-                        if (widget.showAdminLocations && _isMyRescueActive)
+                        // Show admin markers
+                        if (widget.showAdminLocations)
                           MarkerLayer(markers: _buildAdminMarkers()),
                       ],
                     ),
@@ -1245,9 +1253,9 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       return const [];
     }
 
-    return _adminLocations
-        .map((admin) {
-          // Try multiple possible field names for location
+    // Filter to show only one coast guard marker (most recent location)
+    final validAdmins = _adminLocations
+        .where((admin) {
           final lat =
               admin['current_latitude'] ??
               admin['latitude'] ??
@@ -1256,47 +1264,60 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
               admin['current_longitude'] ??
               admin['longitude'] ??
               admin['current_location']?['longitude'];
-
-          // Skip admins without location data
-          if (lat == null || lng == null) return null;
-
-          return Marker(
-            point: latlong.LatLng(
-              (lat as num).toDouble(),
-              (lng as num).toDouble(),
-            ),
-            width: 50,
-            height: 50,
-            child: GestureDetector(
-              onTap: () {
-                // Show admin details on tap
-                _showAdminDetails(admin);
-              },
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.green,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.green.withOpacity(0.5),
-                      blurRadius: 12,
-                      spreadRadius: 3,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.local_police,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ),
-          );
+          return lat != null && lng != null;
         })
-        .where((marker) => marker != null)
-        .cast<Marker>()
         .toList();
+
+    if (validAdmins.isEmpty) return const [];
+
+    // Get the most recent admin location (or first one if no timestamp)
+    final admin = validAdmins.first;
+    final lat =
+        admin['current_latitude'] ??
+        admin['latitude'] ??
+        admin['current_location']?['latitude'];
+    final lng =
+        admin['current_longitude'] ??
+        admin['longitude'] ??
+        admin['current_location']?['longitude'];
+
+    if (lat == null || lng == null) return const [];
+
+    return [
+      Marker(
+        point: latlong.LatLng(
+          (lat as num).toDouble(),
+          (lng as num).toDouble(),
+        ),
+        width: 50,
+        height: 50,
+        child: GestureDetector(
+          onTap: () {
+            // Show admin details on tap
+            _showAdminDetails(admin);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.blue, // Blue to match live location markers
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.6),
+                  blurRadius: 12,
+                  spreadRadius: 3,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.local_police,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
+    ];
   }
 
   // Build markers for live fisherman locations
@@ -1305,20 +1326,47 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
   ) {
     if (liveLocations.isEmpty) return const [];
 
-    return liveLocations
+    // Deduplicate locations - keep only the most recent location per fisherman
+    final Map<String, Map<String, dynamic>> uniqueLocations = {};
+    
+    for (final location in liveLocations) {
+      final fishermanUid = location['fisherman_uid']?.toString();
+      final fishermanEmail = location['fisherman_email']?.toString();
+      
+      // Use UID as primary key, fallback to email if UID is null
+      final key = fishermanUid ?? fishermanEmail ?? '';
+      if (key.isEmpty) continue;
+      
+      // If we haven't seen this fisherman yet, or this location is more recent, keep it
+      if (!uniqueLocations.containsKey(key)) {
+        uniqueLocations[key] = location;
+      } else {
+        final existing = uniqueLocations[key]!;
+        final existingUpdatedAt = existing['updated_at']?.toString();
+        final currentUpdatedAt = location['updated_at']?.toString();
+        
+        if (existingUpdatedAt != null && currentUpdatedAt != null) {
+          try {
+            final existingTime = DateTime.parse(existingUpdatedAt);
+            final currentTime = DateTime.parse(currentUpdatedAt);
+            if (currentTime.isAfter(existingTime)) {
+              uniqueLocations[key] = location;
+            }
+          } catch (e) {
+            // If parsing fails, keep the existing one
+          }
+        }
+      }
+    }
+
+    // Build markers from deduplicated locations
+    return uniqueLocations.values
         .map((location) {
           final lat = (location['latitude'] as num?)?.toDouble();
           final lng = (location['longitude'] as num?)?.toDouble();
 
           // Skip locations without valid coordinates
           if (lat == null || lng == null) return null;
-
-          // Check how recent the location is (within last 5 minutes = active)
-          final updatedAt = location['updated_at']?.toString();
-          final isRecent =
-              updatedAt != null &&
-              DateTime.now().difference(DateTime.parse(updatedAt)).inMinutes <
-                  5;
 
           return Marker(
             point: latlong.LatLng(lat, lng),
@@ -1328,14 +1376,12 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
               onTap: () => _showLiveLocationDetails(location),
               child: Container(
                 decoration: BoxDecoration(
-                  color: isRecent ? Colors.blue : Colors.grey,
+                  color: Colors.blue,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                   boxShadow: [
                     BoxShadow(
-                      color: (isRecent ? Colors.blue : Colors.grey).withOpacity(
-                        0.5,
-                      ),
+                      color: Colors.blue.withOpacity(0.5),
                       blurRadius: 10,
                       spreadRadius: 2,
                     ),
@@ -1773,6 +1819,8 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
       try {
         final casualties = result['casualties'] as int? ?? 0;
         final injured = result['injured'] as int? ?? 0;
+        final missing = result['missing'] as int? ?? 0;
+        final totalOnboard = result['total_onboard'] as int? ?? 0;
 
         // Mark as inactive when resolved is clicked
         final success = await databaseService.updateSOSAlertStatus(
@@ -1780,6 +1828,8 @@ class _MapWidgetSimpleState extends State<MapWidgetSimple> {
           'inactive',
           casualties: casualties,
           injured: injured,
+          missing: missing,
+          totalOnboard: totalOnboard,
         );
 
         if (success) {
@@ -1868,11 +1918,19 @@ class _ResolveDialogState extends State<_ResolveDialog> {
   final TextEditingController _injuredController = TextEditingController(
     text: '0',
   );
+  final TextEditingController _missingController = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _totalOnboardController = TextEditingController(
+    text: '0',
+  );
 
   @override
   void dispose() {
     _casualtiesController.dispose();
     _injuredController.dispose();
+    _missingController.dispose();
+    _totalOnboardController.dispose();
     super.dispose();
   }
 
@@ -1913,6 +1971,26 @@ class _ResolveDialogState extends State<_ResolveDialog> {
               ),
               keyboardType: TextInputType.number,
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _missingController,
+              decoration: const InputDecoration(
+                labelText: 'Missing',
+                hintText: 'Enter number of missing persons',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _totalOnboardController,
+              decoration: const InputDecoration(
+                labelText: 'Total Onboard',
+                hintText: 'Enter total number of persons on board',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
           ],
         ),
       ),
@@ -1927,6 +2005,8 @@ class _ResolveDialogState extends State<_ResolveDialog> {
               'confirmed': true,
               'casualties': int.tryParse(_casualtiesController.text) ?? 0,
               'injured': int.tryParse(_injuredController.text) ?? 0,
+              'missing': int.tryParse(_missingController.text) ?? 0,
+              'total_onboard': int.tryParse(_totalOnboardController.text) ?? 0,
             });
           },
           style: ElevatedButton.styleFrom(

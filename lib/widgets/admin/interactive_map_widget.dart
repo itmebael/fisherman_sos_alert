@@ -160,26 +160,6 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
               ),
             ),
             
-            // Status indicator
-            Positioned(
-              bottom: 8,
-              right: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _hasConnectionError ? Colors.red : Colors.green,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  _hasConnectionError ? 'Offline' : 'Active',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
             
             // Retry button if connection error
             if (_hasConnectionError)

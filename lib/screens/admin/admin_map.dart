@@ -333,43 +333,6 @@ class _AdminMapScreenState extends State<AdminMapScreen> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 8),
-                                // Offline Marker Legend
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 28,
-                                      height: 28,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.grey.withValues(alpha: 0.3),
-                                            blurRadius: 4,
-                                            spreadRadius: 1,
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Icon(
-                                        Icons.person_pin_circle,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Offline (>5m ago)',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
                               ],
                             )
                           : Row(
@@ -480,41 +443,6 @@ class _AdminMapScreenState extends State<AdminMapScreen> {
                                     ),
                                   ],
                                 ),
-                                // Offline Marker Legend
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 32,
-                                      height: 32,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.grey.withValues(alpha: 0.3),
-                                            blurRadius: 4,
-                                            spreadRadius: 1,
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Icon(
-                                        Icons.person_pin_circle,
-                                        color: Colors.white,
-                                        size: 18,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Offline',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
                               ],
                             ),
                     ),
@@ -534,6 +462,9 @@ class _AdminMapScreenState extends State<AdminMapScreen> {
                             ],
                           ),
                           child: MapWidgetSimple(
+                            showSOSAlerts: true, // Show SOS alerts on admin map
+                            showBoundaries: true, // Show boundaries
+                            showAdminLocations: true, // Show admin/coast guard locations
                             searchedLocation: _searchedLocation ?? (widget.initialLatitude != null && widget.initialLongitude != null 
                               ? latlong.LatLng(widget.initialLatitude!, widget.initialLongitude!)
                               : null),

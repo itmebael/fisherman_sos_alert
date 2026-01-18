@@ -216,12 +216,24 @@ class AuthProvider with ChangeNotifier {
   Future<void> reloadUser() async {
     try {
       if (_currentUser != null) {
-        await _authService.fetchUserData(_currentUser!.id);
-        _currentUser = _authService.currentUser;
-        notifyListeners();
+        final userId = _currentUser!.id;
+        await _authService.fetchUserData(userId);
+        // Ensure we get the updated user from auth service
+        final updatedUser = _authService.currentUser;
+        if (updatedUser != null) {
+          _currentUser = updatedUser;
+          notifyListeners();
+          print('User data reloaded successfully');
+        } else {
+          print('Warning: Updated user is null after reload');
+        }
+      } else {
+        print('Warning: Cannot reload user - currentUser is null');
       }
     } catch (e) {
       print('Error reloading user data: $e');
+      // Still notify listeners to trigger UI update even if reload failed
+      notifyListeners();
     }
   }
 

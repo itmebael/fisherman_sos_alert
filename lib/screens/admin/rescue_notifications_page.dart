@@ -1293,6 +1293,8 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
       try {
         final casualties = result['casualties'] as int? ?? 0;
         final injured = result['injured'] as int? ?? 0;
+        final missing = result['missing'] as int? ?? 0;
+        final totalOnboard = result['total_onboard'] as int? ?? 0;
 
         // Mark as inactive when resolved is clicked
         final success = await _databaseService.updateSOSAlertStatus(
@@ -1300,6 +1302,8 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
           'inactive',
           casualties: casualties,
           injured: injured,
+          missing: missing,
+          totalOnboard: totalOnboard,
         );
 
         if (success) {
@@ -1524,11 +1528,19 @@ class _ResolveDialogState extends State<_ResolveDialog> {
   final TextEditingController _injuredController = TextEditingController(
     text: '0',
   );
+  final TextEditingController _missingController = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _totalOnboardController = TextEditingController(
+    text: '0',
+  );
 
   @override
   void dispose() {
     _casualtiesController.dispose();
     _injuredController.dispose();
+    _missingController.dispose();
+    _totalOnboardController.dispose();
     super.dispose();
   }
 
@@ -1569,6 +1581,26 @@ class _ResolveDialogState extends State<_ResolveDialog> {
               ),
               keyboardType: TextInputType.number,
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _missingController,
+              decoration: const InputDecoration(
+                labelText: 'Missing',
+                hintText: 'Enter number of missing persons',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _totalOnboardController,
+              decoration: const InputDecoration(
+                labelText: 'Total Onboard',
+                hintText: 'Enter total number of persons on board',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
           ],
         ),
       ),
@@ -1583,6 +1615,8 @@ class _ResolveDialogState extends State<_ResolveDialog> {
               'confirmed': true,
               'casualties': int.tryParse(_casualtiesController.text) ?? 0,
               'injured': int.tryParse(_injuredController.text) ?? 0,
+              'missing': int.tryParse(_missingController.text) ?? 0,
+              'total_onboard': int.tryParse(_totalOnboardController.text) ?? 0,
             });
           },
           style: ElevatedButton.styleFrom(

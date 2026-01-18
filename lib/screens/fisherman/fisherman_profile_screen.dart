@@ -5,12 +5,42 @@ import '../../constants/routes.dart';
 import '../../providers/auth_provider.dart';
 import 'fisherman_drawer.dart';
 
-class FishermanProfileScreen extends StatelessWidget {
+class FishermanProfileScreen extends StatefulWidget {
   const FishermanProfileScreen({super.key});
 
   @override
+  State<FishermanProfileScreen> createState() => _FishermanProfileScreenState();
+}
+
+class _FishermanProfileScreenState extends State<FishermanProfileScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Reload user data when screen is initialized
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        auth.reloadUser();
+      }
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload when dependencies change (e.g., returning from edit screen)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        auth.reloadUser();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthProvider>(context);
+    // Listen to auth provider changes to rebuild when user data updates
+    final auth = Provider.of<AuthProvider>(context, listen: true);
     final user = auth.currentUser;
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 600;
@@ -34,15 +64,7 @@ class FishermanProfileScreen extends StatelessWidget {
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit, color: AppColors.whiteColor),
-            onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.fishermanEditProfile);
-            },
-            tooltip: 'Edit Profile',
-          ),
-        ],
+        actions: [],
       ),
       body: Container(
         width: double.infinity,
@@ -224,28 +246,6 @@ class FishermanProfileScreen extends StatelessWidget {
           color: Colors.orange,
         ),
         const SizedBox(height: 24),
-        
-        // Edit Profile Button
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.fishermanEditProfile);
-            },
-            icon: const Icon(Icons.edit),
-            label: const Text('Edit Profile'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 2,
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
       ],
     );
   }
@@ -416,25 +416,6 @@ class FishermanProfileScreen extends StatelessWidget {
                     color: Colors.orange,
                   ),
                   const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pushNamed(context, AppRoutes.fishermanEditProfile);
-                      },
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit Profile'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),

@@ -37,71 +37,230 @@ class _FishermanHomeScreenState extends State<FishermanHomeScreen> {
 
 
   Future<void> _makePhoneCall(String phoneNumber) async {
-    final Uri phoneUri = Uri(scheme: 'tel', path: phoneNumber);
+    // Clean phone number - remove any non-digit characters except +
+    final cleanedNumber = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    final Uri phoneUri = Uri(scheme: 'tel', path: cleanedNumber);
+    
     try {
-      if (await canLaunchUrl(phoneUri)) {
-        await launchUrl(phoneUri);
-      } else {
-        throw 'Could not launch phone call';
+      // Ensure we're on the UI thread before making the call
+      if (!mounted) return;
+      
+      // Try to launch the phone call directly
+      // On some devices/emulators, canLaunchUrl may return false even if tel: works
+      try {
+        await launchUrl(
+          phoneUri,
+          mode: LaunchMode.externalApplication,
+        );
+        // If successful, return early
+        return;
+      } catch (launchError) {
+        // If launch fails, check if URL can be launched
+        final canLaunch = await canLaunchUrl(phoneUri);
+        
+        if (canLaunch) {
+          // Try again with platform default mode
+          await launchUrl(phoneUri);
+        } else {
+          // Show dialog with phone number for manual dialing
+          if (mounted) {
+            _showManualDialDialog(cleanedNumber);
+          }
+        }
       }
     } catch (e) {
       // Handle error - phone call not available
       print('Error making phone call: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: Unable to make phone call. $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showManualDialDialog(cleanedNumber);
       }
     }
   }
 
-  void _showCallDialog() {
-    // Always use the emergency call number 09393898330
-    final String phoneNumber = AppStrings.emergencyCallNumber;
-    final String contactName = AppStrings.emergencyContactName;
-
+  void _showManualDialDialog(String phoneNumber) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.local_police, color: Colors.green),
+            Icon(Icons.phone, color: Colors.blue),
             SizedBox(width: 8),
-            Text('Call Coast Guard'),
+            Text('Phone Call Not Available'),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Contact: $contactName'),
-            const SizedBox(height: 8),
-            Text('Phone: $phoneNumber'),
-            const SizedBox(height: 16),
             const Text(
-              'Do you want to call the Coast Guard?',
-              style: TextStyle(fontWeight: FontWeight.bold),
+              'Unable to make phone call automatically. Please dial the number manually:',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone, color: Colors.blue, size: 20),
+                  const SizedBox(width: 8),
+                  SelectableText(
+                    phoneNumber,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Close'),
           ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _makePhoneCall(phoneNumber);
-            },
-            icon: const Icon(Icons.phone, size: 18),
-            label: const Text('Call'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+        ],
+      ),
+    );
+  }
+
+  void _showCallDialog() {
+    // Always use the emergency call number 09393898330
+    final String phoneNumber = AppStrings.emergencyCallNumber;
+    final String contactName = AppStrings.emergencyContactName;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.local_police,
+              color: Colors.green,
+              size: isMobile ? 24 : 28,
+            ),
+            SizedBox(width: isMobile ? 8 : 12),
+            Flexible(
+              child: Text(
+                'Call Coast Guard',
+                style: TextStyle(
+                  fontSize: isMobile ? 18 : 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.person, size: isMobile ? 18 : 20, color: Colors.blue),
+                SizedBox(width: isMobile ? 8 : 12),
+                Flexible(
+                  child: Text(
+                    'Contact: $contactName',
+                    style: TextStyle(fontSize: isMobile ? 14 : 16),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: isMobile ? 12 : 16),
+            Row(
+              children: [
+                Icon(Icons.phone, size: isMobile ? 18 : 20, color: Colors.green),
+                SizedBox(width: isMobile ? 8 : 12),
+                Flexible(
+                  child: Text(
+                    'Phone: $phoneNumber',
+                    style: TextStyle(
+                      fontSize: isMobile ? 14 : 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: isMobile ? 16 : 20),
+            Container(
+              padding: EdgeInsets.all(isMobile ? 12 : 16),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Text(
+                'Do you want to call the Coast Guard?',
+                style: TextStyle(
+                  fontSize: isMobile ? 14 : 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade900,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 16 : 24,
+                      vertical: isMobile ? 8 : 12,
+                    ),
+                  ),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: isMobile ? 14 : 16),
+                  ),
+                ),
+                SizedBox(width: isMobile ? 8 : 12),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // Use post frame callback to ensure UI thread
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _makePhoneCall(phoneNumber);
+                    });
+                  },
+                  icon: Icon(Icons.phone, size: isMobile ? 18 : 20),
+                  label: Text(
+                    'Call',
+                    style: TextStyle(fontSize: isMobile ? 14 : 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 20 : 24,
+                      vertical: isMobile ? 10 : 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

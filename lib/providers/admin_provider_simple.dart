@@ -11,6 +11,8 @@ class EmergencyStatPoint {
   final int injuredCount;
   final int casualtyCount;
   final int rescuedCount;
+  final int missingCount;
+  final int totalOnboardCount;
 
   EmergencyStatPoint({
     required this.label,
@@ -18,6 +20,8 @@ class EmergencyStatPoint {
     this.injuredCount = 0,
     this.casualtyCount = 0,
     this.rescuedCount = 0,
+    this.missingCount = 0,
+    this.totalOnboardCount = 0,
   });
 }
 
@@ -302,7 +306,7 @@ class AdminProviderSimple with ChangeNotifier {
         // Initialize all days of the week
         final Map<int, Map<String, int>> dayBuckets = {};
         for (int day = 1; day <= 7; day++) {
-          dayBuckets[day] = {'sos': 0, 'injured': 0, 'casualty': 0, 'rescued': 0};
+          dayBuckets[day] = {'sos': 0, 'injured': 0, 'casualty': 0, 'rescued': 0, 'missing': 0, 'total_onboard': 0};
         }
 
         for (final alert in alerts) {
@@ -324,6 +328,8 @@ class AdminProviderSimple with ChangeNotifier {
             injuredCount: dayBuckets[day]!['injured']!,
             casualtyCount: dayBuckets[day]!['casualty']!,
             rescuedCount: dayBuckets[day]!['rescued']!,
+            missingCount: dayBuckets[day]!['missing']!,
+            totalOnboardCount: dayBuckets[day]!['total_onboard']!,
           ));
         }
 
@@ -341,7 +347,7 @@ class AdminProviderSimple with ChangeNotifier {
           final weekStartDay = DateTime(weekStart.year, weekStart.month, weekStart.day);
           final weekEndDay = DateTime(weekEnd.year, weekEnd.month, weekEnd.day, 23, 59, 59);
 
-          int sos = 0, injured = 0, casualty = 0, rescued = 0;
+          int sos = 0, injured = 0, casualty = 0, rescued = 0, missing = 0, totalOnboard = 0;
 
           for (final alert in alerts) {
             final created = DateTime.parse(alert['created_at'].toString());
@@ -354,6 +360,8 @@ class AdminProviderSimple with ChangeNotifier {
               
               injured += (alert['injured'] as int? ?? 0);
               casualty += (alert['casualties'] as int? ?? 0);
+              missing += (alert['missing'] as int? ?? 0);
+              totalOnboard += (alert['total_onboard'] as int? ?? 0);
             }
           }
 
@@ -363,6 +371,8 @@ class AdminProviderSimple with ChangeNotifier {
             injuredCount: injured,
             casualtyCount: casualty,
             rescuedCount: rescued,
+            missingCount: missing,
+            totalOnboardCount: totalOnboard,
           ));
         }
 
@@ -389,7 +399,7 @@ class AdminProviderSimple with ChangeNotifier {
           
           final monthLabel = _getMonthLabel(targetMonth);
           
-          int sos = 0, injured = 0, casualty = 0, rescued = 0;
+          int sos = 0, injured = 0, casualty = 0, rescued = 0, missing = 0, totalOnboard = 0;
 
           for (final alert in alerts) {
             final created = DateTime.parse(alert['created_at'].toString());
@@ -402,6 +412,8 @@ class AdminProviderSimple with ChangeNotifier {
               
               injured += (alert['injured'] as int? ?? 0);
               casualty += (alert['casualties'] as int? ?? 0);
+              missing += (alert['missing'] as int? ?? 0);
+              totalOnboard += (alert['total_onboard'] as int? ?? 0);
             }
           }
           
@@ -411,6 +423,8 @@ class AdminProviderSimple with ChangeNotifier {
             injuredCount: injured,
             casualtyCount: casualty,
             rescuedCount: rescued,
+            missingCount: missing,
+            totalOnboardCount: totalOnboard,
           ));
         }
 
@@ -426,7 +440,7 @@ class AdminProviderSimple with ChangeNotifier {
           final yearStart = DateTime(targetYear, 1, 1);
           final yearEnd = DateTime(targetYear + 1, 1, 1).subtract(const Duration(seconds: 1));
           
-          int sos = 0, injured = 0, casualty = 0, rescued = 0;
+          int sos = 0, injured = 0, casualty = 0, rescued = 0, missing = 0, totalOnboard = 0;
 
           for (final alert in alerts) {
             final created = DateTime.parse(alert['created_at'].toString());
@@ -439,6 +453,8 @@ class AdminProviderSimple with ChangeNotifier {
               
               injured += (alert['injured'] as int? ?? 0);
               casualty += (alert['casualties'] as int? ?? 0);
+              missing += (alert['missing'] as int? ?? 0);
+              totalOnboard += (alert['total_onboard'] as int? ?? 0);
             }
           }
           
@@ -448,6 +464,8 @@ class AdminProviderSimple with ChangeNotifier {
             injuredCount: injured,
             casualtyCount: casualty,
             rescuedCount: rescued,
+            missingCount: missing,
+            totalOnboardCount: totalOnboard,
           ));
         }
       }
@@ -471,6 +489,8 @@ class AdminProviderSimple with ChangeNotifier {
     
     bucket['injured'] = (bucket['injured'] ?? 0) + (alert['injured'] as int? ?? 0);
     bucket['casualty'] = (bucket['casualty'] ?? 0) + (alert['casualties'] as int? ?? 0);
+    bucket['missing'] = (bucket['missing'] ?? 0) + (alert['missing'] as int? ?? 0);
+    bucket['total_onboard'] = (bucket['total_onboard'] ?? 0) + (alert['total_onboard'] as int? ?? 0);
   }
 
   String _getDayLabel(int weekday) {

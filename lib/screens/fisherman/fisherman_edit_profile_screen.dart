@@ -74,8 +74,9 @@ class _FishermanEditProfileScreenState extends State<FishermanEditProfileScreen>
       }
 
       // Update user data in Supabase
+      // Note: updated_at will be automatically set by database trigger
       final supabase = Supabase.instance.client;
-      final response = await supabase
+      await supabase
           .from('fishermen')
           .update({
             'first_name': _firstNameController.text.trim(),
@@ -85,18 +86,23 @@ class _FishermanEditProfileScreenState extends State<FishermanEditProfileScreen>
             'address': _addressController.text.trim(),
             'fishing_area': _fishingAreaController.text.trim(),
             'emergency_contact_person': _emergencyContactController.text.trim(),
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
+            // updated_at will be automatically set by database trigger
           })
-          .eq('id', user.id);
+          .eq('id', user.id)
+          .select();
 
-      if (response.error != null) {
-        throw Exception('Failed to update profile: ${response.error!.message}');
-      }
+      print('Profile update query executed successfully');
 
-      // Update local user data
+      // Small delay to ensure database consistency
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Update local user data - wait for it to complete
       await auth.reloadUser();
       
+      // Force refresh to update UI
       auth.forceRefresh();
+      
+      print('User data reloaded and UI refreshed');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -105,7 +111,7 @@ class _FishermanEditProfileScreenState extends State<FishermanEditProfileScreen>
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(true); // Return true to indicate success
       }
     } catch (e) {
       if (mounted) {

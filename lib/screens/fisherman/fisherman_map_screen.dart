@@ -150,18 +150,76 @@ class _FishermanMapScreenState extends State<FishermanMapScreen> {
                       ),
                       child: Row(
                         children: [
-                          _buildLegendItem(
-                            isMobile,
-                            Colors.green,
-                            Icons.local_police,
-                            'Rescue Team (Admin)',
+                          // Coast Guard legend item - matches marker exactly (scaled proportionally)
+                          Row(
+                            children: [
+                              Container(
+                                width: isMobile ? 24 : 26,
+                                height: isMobile ? 24 : 26,
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 3),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.blue.withOpacity(0.6),
+                                      blurRadius: 12,
+                                      spreadRadius: 3,
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  Icons.person_pin_circle,
+                                  color: Colors.white,
+                                  size: isMobile ? 14 : 16,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Rescue Team (Admin)',
+                                style: TextStyle(
+                                  fontSize: isMobile ? 12 : 13,
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                           SizedBox(width: isMobile ? 12 : 16),
-                          _buildLegendItem(
-                            isMobile,
-                            AppColors.primaryColor,
-                            Icons.my_location,
-                            'Your Location',
+                          // Your Location legend item - matches marker exactly
+                          Row(
+                            children: [
+                              Container(
+                                width: isMobile ? 20 : 22,
+                                height: isMobile ? 20 : 22,
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.blue.withOpacity(0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.my_location,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Your Location',
+                                style: TextStyle(
+                                  fontSize: isMobile ? 12 : 13,
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

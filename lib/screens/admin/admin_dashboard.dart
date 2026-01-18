@@ -883,9 +883,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
               runSpacing: 8,
               children: [
                 _buildChartLegendItem('SOS Alerts', Colors.red.shade700),
-                _buildChartLegendItem('Injured', Colors.amber.shade800),
-                _buildChartLegendItem('Casualties', Colors.grey),
+                _buildChartLegendItem('Injured', Colors.orange.shade700),
                 _buildChartLegendItem('Rescued', Colors.green.shade700),
+                _buildChartLegendItem('Casualties', Colors.grey.shade700),
+                _buildChartLegendItem('Missing', Colors.amber.shade700),
+                _buildChartLegendItem('Total Onboard', Colors.blue.shade700),
               ],
             ),
             const SizedBox(height: 24),
@@ -974,15 +976,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             ),
                             _buildLineChartBarData(
                               stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.injuredCount.toDouble())).toList(),
-                              Colors.amber.shade800,
-                            ),
-                            _buildLineChartBarData(
-                              stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.casualtyCount.toDouble())).toList(),
-                              Colors.grey,
+                              Colors.orange.shade700,
                             ),
                             _buildLineChartBarData(
                               stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.rescuedCount.toDouble())).toList(),
                               Colors.green.shade700,
+                            ),
+                            _buildLineChartBarData(
+                              stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.casualtyCount.toDouble())).toList(),
+                              Colors.grey.shade700,
+                            ),
+                            _buildLineChartBarData(
+                              stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.missingCount.toDouble())).toList(),
+                              Colors.amber.shade700,
+                            ),
+                            _buildLineChartBarData(
+                              stats.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.totalOnboardCount.toDouble())).toList(),
+                              Colors.blue.shade700,
                             ),
                           ],
                           lineTouchData: LineTouchData(
@@ -1015,15 +1025,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                       break;
                                     case 1:
                                       label = 'Injured';
-                                      color = Colors.amber.shade400;
+                                      color = Colors.orange.shade400;
                                       break;
                                     case 2:
+                                      label = 'Rescued';
+                                      color = Colors.green.shade400;
+                                      break;
+                                    case 3:
                                       label = 'Casualties';
                                       color = Colors.grey.shade300;
                                       break;
-                                    case 3:
-                                      label = 'Rescued';
-                                      color = Colors.green.shade400;
+                                    case 4:
+                                      label = 'Missing';
+                                      color = Colors.amber.shade400;
+                                      break;
+                                    case 5:
+                                      label = 'Total Onboard';
+                                      color = Colors.blue.shade400;
                                       break;
                                   }
 
@@ -1075,8 +1093,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 8,
-          height: 8,
+          width: 12,
+          height: 12,
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,

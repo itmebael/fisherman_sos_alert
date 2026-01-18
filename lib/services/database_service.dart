@@ -446,17 +446,94 @@ class DatabaseService {
     return uuidRegex.hasMatch(value);
   }
 
-  // Get all live locations
+  // Get all live locations - returns only most recent per fisherman
+  // Filters out locations not updated in the last 1 minute (offline users)
   Future<List<Map<String, dynamic>>> getLiveLocations() async {
     try {
       return await _connectionService.executeWithRetry(() async {
-        final response = await _supabase
-            .from('live_locations')
-            .select('*')
-            .eq('is_active', true)
-            .order('updated_at', ascending: false);
+        // Calculate cutoff time (1 minute ago)
+        final cutoffTime = DateTime.now().subtract(const Duration(minutes: 1));
+        final cutoffTimeString = cutoffTime.toUtc().toIso8601String();
+        
+        // Try to use the view first (returns only most recent per fisherman)
+        try {
+          final response = await _supabase
+              .from('latest_live_locations')
+              .select('*')
+              .order('updated_at', ascending: false);
+          
+          final locations = List<Map<String, dynamic>>.from(response);
+          
+          // Filter out locations older than 1 minute (additional safety check)
+          return locations.where((location) {
+            final updatedAt = location['updated_at']?.toString();
+            if (updatedAt == null) return false;
+            try {
+              final updateTime = DateTime.parse(updatedAt).toUtc();
+              return updateTime.isAfter(cutoffTime);
+            } catch (e) {
+              return false;
+            }
+          }).toList();
+        } catch (viewError) {
+          // If view doesn't exist, use table with deduplication and time filtering
+          print('View latest_live_locations not found, using table with deduplication: $viewError');
+          
+          final response = await _supabase
+              .from('live_locations')
+              .select('*')
+              .eq('is_active', true)
+              .gte('updated_at', cutoffTimeString)  // Only locations updated in last 1 minute
+              .order('updated_at', ascending: false)
+              .limit(1000);
 
-        return List<Map<String, dynamic>>.from(response);
+          final locations = List<Map<String, dynamic>>.from(response);
+          
+          // Deduplicate to keep only most recent location per fisherman
+          final Map<String, Map<String, dynamic>> uniqueLocations = {};
+          for (final location in locations) {
+            final fishermanUid = location['fisherman_uid']?.toString();
+            final fishermanEmail = location['fisherman_email']?.toString();
+            final key = fishermanUid ?? fishermanEmail ?? '';
+            
+            if (key.isEmpty) continue;
+            
+            // Additional time check
+            final updatedAt = location['updated_at']?.toString();
+            if (updatedAt != null) {
+              try {
+                final updateTime = DateTime.parse(updatedAt).toUtc();
+                if (!updateTime.isAfter(cutoffTime)) {
+                  continue; // Skip locations older than 1 minute
+                }
+              } catch (e) {
+                continue; // Skip if can't parse timestamp
+              }
+            }
+            
+            if (!uniqueLocations.containsKey(key)) {
+              uniqueLocations[key] = location;
+            } else {
+              final existing = uniqueLocations[key]!;
+              final existingUpdatedAt = existing['updated_at']?.toString();
+              final currentUpdatedAt = location['updated_at']?.toString();
+              
+              if (existingUpdatedAt != null && currentUpdatedAt != null) {
+                try {
+                  final existingTime = DateTime.parse(existingUpdatedAt);
+                  final currentTime = DateTime.parse(currentUpdatedAt);
+                  if (currentTime.isAfter(existingTime)) {
+                    uniqueLocations[key] = location;
+                  }
+                } catch (e) {
+                  // If parsing fails, keep existing
+                }
+              }
+            }
+          }
+          
+          return uniqueLocations.values.toList();
+        }
       });
     } catch (e) {
       print('Error fetching live locations: $e');
@@ -465,12 +542,91 @@ class DatabaseService {
   }
 
   // Get stream of live locations for real-time updates
+  // Returns only the most recent location per fisherman
+  // Filters out locations not updated in the last 1 minute (offline users)
   Stream<List<Map<String, dynamic>>> getLiveLocationsStream() {
-    return _supabase
-        .from('live_locations')
-        .stream(primaryKey: ['id'])
-        .eq('is_active', true)
-        .order('updated_at', ascending: false);
+    // Calculate cutoff time (1 minute ago)
+    final cutoffTime = DateTime.now().subtract(const Duration(minutes: 1));
+    final cutoffTimeString = cutoffTime.toUtc().toIso8601String();
+    
+    // Try to use the view first, fallback to table with deduplication
+    try {
+      return _supabase
+          .from('latest_live_locations')
+          .stream(primaryKey: ['id'])
+          .order('updated_at', ascending: false)
+          .map((data) {
+            // Additional filter to ensure only locations updated in last 1 minute
+            final filtered = (data as List).where((location) {
+              final updatedAt = location['updated_at']?.toString();
+              if (updatedAt == null) return false;
+              try {
+                final updateTime = DateTime.parse(updatedAt).toUtc();
+                return updateTime.isAfter(cutoffTime);
+              } catch (e) {
+                return false;
+              }
+            }).toList();
+            return filtered.cast<Map<String, dynamic>>();
+          });
+    } catch (e) {
+      // If view doesn't exist, use table with deduplication in code
+      print('View latest_live_locations not found, using table with deduplication: $e');
+      return _supabase
+          .from('live_locations')
+          .stream(primaryKey: ['id'])
+          .eq('is_active', true)
+          .order('updated_at', ascending: false)
+          .limit(1000)
+          .map((data) {
+            // Filter locations updated in last 1 minute and deduplicate in stream
+            final locations = (data as List).cast<Map<String, dynamic>>();
+            final Map<String, Map<String, dynamic>> uniqueLocations = {};
+            
+            for (final location in locations) {
+              // Filter out locations older than 1 minute
+              final updatedAt = location['updated_at']?.toString();
+              if (updatedAt != null) {
+                try {
+                  final updateTime = DateTime.parse(updatedAt).toUtc();
+                  if (!updateTime.isAfter(cutoffTime)) {
+                    continue; // Skip locations older than 1 minute
+                  }
+                } catch (e) {
+                  continue; // Skip if can't parse timestamp
+                }
+              }
+              
+              final fishermanUid = location['fisherman_uid']?.toString();
+              final fishermanEmail = location['fisherman_email']?.toString();
+              final key = fishermanUid ?? fishermanEmail ?? '';
+              
+              if (key.isEmpty) continue;
+              
+              if (!uniqueLocations.containsKey(key)) {
+                uniqueLocations[key] = location;
+              } else {
+                final existing = uniqueLocations[key]!;
+                final existingUpdatedAt = existing['updated_at']?.toString();
+                final currentUpdatedAt = location['updated_at']?.toString();
+                
+                if (existingUpdatedAt != null && currentUpdatedAt != null) {
+                  try {
+                    final existingTime = DateTime.parse(existingUpdatedAt);
+                    final currentTime = DateTime.parse(currentUpdatedAt);
+                    if (currentTime.isAfter(existingTime)) {
+                      uniqueLocations[key] = location;
+                    }
+                  } catch (e) {
+                    // If parsing fails, keep existing
+                  }
+                }
+              }
+            }
+            
+            return uniqueLocations.values.toList();
+          });
+    }
   }
 
   // Stop tracking location for a fisherman (mark as inactive)
@@ -721,7 +877,7 @@ class DatabaseService {
   }
 
   // Update SOS alert status
-  Future<bool> updateSOSAlertStatus(String alertId, String status, {int? casualties, int? injured}) async {
+  Future<bool> updateSOSAlertStatus(String alertId, String status, {int? casualties, int? injured, int? missing, int? totalOnboard}) async {
     return await _connectionService.executeWithRetry(() async {
       try {
         print('=== UPDATING SOS ALERT STATUS ===');
@@ -762,6 +918,13 @@ class DatabaseService {
           }
           if (injured != null) {
             updateData['injured'] = injured;
+          }
+          // Save missing and total_onboard if provided
+          if (missing != null) {
+            updateData['missing'] = missing;
+          }
+          if (totalOnboard != null) {
+            updateData['total_onboard'] = totalOnboard;
           }
           // Convert 'resolved' to 'inactive' in the database
           if (status == 'resolved') {
@@ -1195,33 +1358,39 @@ class DatabaseService {
     });
   }
 
-  // Get rescue statistics (total rescue, casualties, injured) - from inactive alerts
+  // Get rescue statistics (total rescue, casualties, injured, missing, total_onboard) - from inactive alerts
   Future<Map<String, int>> getRescueStatistics() async {
     return await _connectionService.executeWithRetry(() async {
       final rescued = await _supabase
           .from('sos_alerts')
-          .select('id, casualties, injured')
+          .select('id, casualties, injured, missing, total_onboard')
           .eq('status', 'inactive');
       
       int totalRescue = rescued.length;
       int totalCasualties = 0;
       int totalInjured = 0;
+      int totalMissing = 0;
+      int totalOnboard = 0;
       
       for (var alert in rescued) {
         totalCasualties += (alert['casualties'] as num?)?.toInt() ?? 0;
         totalInjured += (alert['injured'] as num?)?.toInt() ?? 0;
+        totalMissing += (alert['missing'] as num?)?.toInt() ?? 0;
+        totalOnboard += (alert['total_onboard'] as num?)?.toInt() ?? 0;
       }
       
       return {
         'totalRescue': totalRescue,
         'casualties': totalCasualties,
         'injured': totalInjured,
+        'missing': totalMissing,
+        'total_onboard': totalOnboard,
       };
     });
   }
   
   // Mark alert as inactive first, then as rescued
-  Future<bool> markAsInactiveThenRescued(String alertId, {int? casualties, int? injured}) async {
+  Future<bool> markAsInactiveThenRescued(String alertId, {int? casualties, int? injured, int? missing, int? totalOnboard}) async {
     return await _connectionService.executeWithRetry(() async {
       try {
         print('=== MARKING ALERT AS INACTIVE THEN RESCUED ===');
@@ -1251,6 +1420,12 @@ class DatabaseService {
         if (injured != null) {
           inactiveData['injured'] = injured;
         }
+        if (missing != null) {
+          inactiveData['missing'] = missing;
+        }
+        if (totalOnboard != null) {
+          inactiveData['total_onboard'] = totalOnboard;
+        }
         
         await _supabase
             .from('sos_alerts')
@@ -1273,6 +1448,12 @@ class DatabaseService {
         }
         if (injured != null) {
           rescuedData['injured'] = injured;
+        }
+        if (missing != null) {
+          rescuedData['missing'] = missing;
+        }
+        if (totalOnboard != null) {
+          rescuedData['total_onboard'] = totalOnboard;
         }
         
         await _supabase
@@ -1321,7 +1502,7 @@ class DatabaseService {
       // Select columns including weather_data, status, and fisherman_uid for boat lookup
       final response = await _supabase
           .from('sos_alerts')
-          .select('id, status, created_at, resolved_at, fisherman_uid, fisherman_name, fisherman_email, fisherman_profile_image_url, fisherman_profile_picture_url, weather_data, casualties, injured')
+          .select('id, status, created_at, resolved_at, fisherman_uid, fisherman_name, fisherman_email, fisherman_profile_image_url, fisherman_profile_picture_url, weather_data, casualties, injured, missing, total_onboard')
           .order('created_at', ascending: false);
 
       final reports = List<Map<String, dynamic>>.from(response);
@@ -1479,6 +1660,8 @@ class DatabaseService {
           'isRescued': isRescued,
           'casualties': row['casualties'] ?? 0,
           'injured': row['injured'] ?? 0,
+          'missing': row['missing'] ?? 0,
+          'total_onboard': row['total_onboard'] ?? 0,
         };
       }).toList();
     });
