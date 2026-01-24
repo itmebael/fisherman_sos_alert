@@ -72,3 +72,12 @@ WHERE updated_at IS NOT NULL;
 -- END OF SCRIPT
 -- =============================================
 
+
+
+
+
+
+
+
+
+
