@@ -1,5 +1,5 @@
 {
-  "buildCommand": "echo 'Using pre-built Flutter web files'",
+  "buildCommand": "bash vercel-build.sh",
   "outputDirectory": "build/web",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
