@@ -1,5 +1,5 @@
 {
-  "buildCommand": "bash vercel-build.sh || (echo 'Build script failed, checking for pre-built files...' && test -d build/web && echo 'Pre-built files found' || exit 1)",
+  "buildCommand": "test -d build/web && echo 'Using pre-built Flutter web files from build/web' || (echo 'Error: build/web directory not found' && exit 1)",
   "outputDirectory": "build/web",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
