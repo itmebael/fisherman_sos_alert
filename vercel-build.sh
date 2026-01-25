@@ -6,7 +6,9 @@ echo "🚀 Vercel Build Script for Flutter Web"
 # Check if build/web already exists (pre-built)
 if [ -d "build/web" ] && [ -f "build/web/index.html" ] && [ -f "build/web/main.dart.js" ]; then
     echo "✅ Pre-built Flutter web files found. Using existing build..."
+    echo "📁 Verifying build/web directory structure..."
     ls -la build/web/ | head -20
+    echo "✅ Build directory verified successfully"
     exit 0
 fi
 
