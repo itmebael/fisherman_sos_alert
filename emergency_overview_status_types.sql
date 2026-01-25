@@ -258,3 +258,4 @@ GRANT EXECUTE ON FUNCTION public.get_emergency_overview_by_status(text) TO authe
 
 
 
+
