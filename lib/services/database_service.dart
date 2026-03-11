@@ -877,7 +877,17 @@ class DatabaseService {
   }
 
   // Update SOS alert status
-  Future<bool> updateSOSAlertStatus(String alertId, String status, {int? casualties, int? injured, int? missing, int? totalOnboard}) async {
+  Future<bool> updateSOSAlertStatus(
+    String alertId,
+    String status, {
+    int? casualties,
+    int? injured,
+    int? missing,
+    int? totalOnboard,
+    String? gender,
+    int? age,
+    String? reasonOfDistress,
+  }) async {
     return await _connectionService.executeWithRetry(() async {
       try {
         print('=== UPDATING SOS ALERT STATUS ===');
@@ -925,6 +935,16 @@ class DatabaseService {
           }
           if (totalOnboard != null) {
             updateData['total_onboard'] = totalOnboard;
+          }
+          // Save gender, age, and reason_of_distress if provided
+          if (gender != null && gender.isNotEmpty) {
+            updateData['gender'] = gender;
+          }
+          if (age != null) {
+            updateData['age'] = age;
+          }
+          if (reasonOfDistress != null && reasonOfDistress.isNotEmpty) {
+            updateData['reason_of_distress'] = reasonOfDistress;
           }
           // Convert 'resolved' to 'inactive' in the database
           if (status == 'resolved') {
@@ -1358,12 +1378,12 @@ class DatabaseService {
     });
   }
 
-  // Get rescue statistics (total rescue, casualties, injured, missing, total_onboard) - from inactive alerts
-  Future<Map<String, int>> getRescueStatistics() async {
+  // Get rescue statistics (total rescue, casualties, injured, missing, total_onboard, average age) - from inactive alerts
+  Future<Map<String, dynamic>> getRescueStatistics() async {
     return await _connectionService.executeWithRetry(() async {
       final rescued = await _supabase
           .from('sos_alerts')
-          .select('id, casualties, injured, missing, total_onboard')
+          .select('id, casualties, injured, missing, total_onboard, age')
           .eq('status', 'inactive');
       
       int totalRescue = rescued.length;
@@ -1371,13 +1391,25 @@ class DatabaseService {
       int totalInjured = 0;
       int totalMissing = 0;
       int totalOnboard = 0;
+      int totalAge = 0;
+      int ageCount = 0;
       
       for (var alert in rescued) {
         totalCasualties += (alert['casualties'] as num?)?.toInt() ?? 0;
         totalInjured += (alert['injured'] as num?)?.toInt() ?? 0;
         totalMissing += (alert['missing'] as num?)?.toInt() ?? 0;
         totalOnboard += (alert['total_onboard'] as num?)?.toInt() ?? 0;
+        
+        // Calculate average age
+        final age = (alert['age'] as num?)?.toInt();
+        if (age != null && age > 0) {
+          totalAge += age;
+          ageCount++;
+        }
       }
+      
+      // Calculate average age (rounded to nearest integer)
+      int averageAge = ageCount > 0 ? (totalAge / ageCount).round() : 0;
       
       return {
         'totalRescue': totalRescue,
@@ -1385,6 +1417,7 @@ class DatabaseService {
         'injured': totalInjured,
         'missing': totalMissing,
         'total_onboard': totalOnboard,
+        'averageAge': averageAge,
       };
     });
   }
@@ -1502,7 +1535,7 @@ class DatabaseService {
       // Select columns including weather_data, status, and fisherman_uid for boat lookup
       final response = await _supabase
           .from('sos_alerts')
-          .select('id, status, created_at, resolved_at, fisherman_uid, fisherman_name, fisherman_email, fisherman_profile_image_url, fisherman_profile_picture_url, weather_data, casualties, injured, missing, total_onboard')
+          .select('id, status, created_at, resolved_at, fisherman_uid, fisherman_name, fisherman_email, fisherman_profile_image_url, fisherman_profile_picture_url, weather_data, casualties, injured, missing, total_onboard, gender, age, reason_of_distress')
           .order('created_at', ascending: false);
 
       final reports = List<Map<String, dynamic>>.from(response);
@@ -1662,6 +1695,9 @@ class DatabaseService {
           'injured': row['injured'] ?? 0,
           'missing': row['missing'] ?? 0,
           'total_onboard': row['total_onboard'] ?? 0,
+          'gender': row['gender'],
+          'age': row['age'],
+          'reason_of_distress': row['reason_of_distress'],
         };
       }).toList();
     });

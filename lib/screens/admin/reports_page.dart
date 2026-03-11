@@ -252,10 +252,13 @@ class _ReportsPageState extends State<ReportsPage> {
 
   String _buildCsv() {
     final buffer = StringBuffer();
-    buffer.writeln('ID,Full Name,Status,Boat Number,Distress Time,Rescue Time,Weather Condition,Temperature,Humidity,Wind Speed,Pressure,Casualties,Injured,Missing,Total Onboard');
+    buffer.writeln('ID,Full Name,Gender,Age,Reason of Distress,Status,Boat Number,Distress Time,Rescue Time,Weather Condition,Temperature,Humidity,Wind Speed,Pressure,Casualties,Injured,Missing,Total Onboard');
     for (final r in _filteredReports) {
       final id = (r['id'] ?? '').toString().replaceAll(',', ' ');
       final name = (r['fullName'] ?? r['fisherman_name'] ?? '').toString().replaceAll(',', ' ');
+      final gender = (r['gender'] ?? '').toString().replaceAll(',', ' ');
+      final age = (r['age'] ?? '').toString().replaceAll(',', ' ');
+      final reasonOfDistress = (r['reason_of_distress'] ?? '').toString().replaceAll(',', ' ');
       final status = _getStatusLabel(r['status']);
       final boatNumber = (r['boat_name'] ?? r['boat_registration_number'] ?? '-').toString().replaceAll(',', ' ');
       final distress = (r['distressTime'] ?? r['created_at'] ?? '').toString().replaceAll(',', ' ');
@@ -273,7 +276,7 @@ class _ReportsPageState extends State<ReportsPage> {
       final injured = (r['injured'] ?? 0).toString();
       final missing = (r['missing'] ?? 0).toString();
       final totalOnboard = (r['total_onboard'] ?? 0).toString();
-      buffer.writeln('$id,$name,$status,$boatNumber,$distress,$rescue,$condition,$temp,$humidity,$windSpeed,$pressure,$casualties,$injured,$missing,$totalOnboard');
+      buffer.writeln('$id,$name,$gender,$age,$reasonOfDistress,$status,$boatNumber,$distress,$rescue,$condition,$temp,$humidity,$windSpeed,$pressure,$casualties,$injured,$missing,$totalOnboard');
     }
     return buffer.toString();
   }
@@ -334,6 +337,9 @@ class _ReportsPageState extends State<ReportsPage> {
                         columns: const [
                           DataColumn(label: Text('ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                           DataColumn(label: Text('Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Gender', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Age', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                          DataColumn(label: Text('Reason of Distress', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                           DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                           DataColumn(label: Text('Boat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                           DataColumn(label: Text('Distress Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
@@ -355,6 +361,20 @@ class _ReportsPageState extends State<ReportsPage> {
                               DataCell(Text(
                                 (r['fullName'] ?? r['fisherman_name'] ?? '-').toString(),
                                 style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                (r['gender'] ?? '-').toString(),
+                                style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                (r['age'] ?? '-').toString(),
+                                style: const TextStyle(fontSize: 11),
+                              )),
+                              DataCell(Text(
+                                (r['reason_of_distress'] ?? '-').toString(),
+                                style: const TextStyle(fontSize: 11),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               )),
                               DataCell(Text(
                                 _getStatusLabel(r['status']),
@@ -890,6 +910,9 @@ class _ReportsPageState extends State<ReportsPage> {
                                     children: [
                                       Expanded(flex: 1, child: Center(child: Text('Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 2, child: Center(child: Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Gender', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 1, child: Center(child: Text('Age', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
+                                      Expanded(flex: 2, child: Center(child: Text('Reason of Distress', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 2, child: Center(child: Text('Boat Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 2, child: Center(child: Text('Distress Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
                                       Expanded(flex: 2, child: Center(child: Text('Rescue Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)))),
@@ -943,6 +966,48 @@ class _ReportsPageState extends State<ReportsPage> {
                                                                 textAlign: TextAlign.center,
                                                                 maxLines: 2,
                                                                 overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Gender
+                                                          Expanded(
+                                                            flex: 1,
+                                                            child: Center(
+                                                              child: Text(
+                                                                (r['gender'] ?? '-').toString(),
+                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
+                                                                textAlign: TextAlign.center,
+                                                                maxLines: 1,
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Age
+                                                          Expanded(
+                                                            flex: 1,
+                                                            child: Center(
+                                                              child: Text(
+                                                                (r['age'] ?? '-').toString(),
+                                                                style: const TextStyle(color: AppColors.textPrimary, fontSize: 11),
+                                                                textAlign: TextAlign.center,
+                                                                maxLines: 1,
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          // Reason of Distress
+                                                          Expanded(
+                                                            flex: 2,
+                                                            child: Center(
+                                                              child: Tooltip(
+                                                                message: (r['reason_of_distress'] ?? '-').toString(),
+                                                                child: Text(
+                                                                  (r['reason_of_distress'] ?? '-').toString(),
+                                                                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 10),
+                                                                  textAlign: TextAlign.center,
+                                                                  maxLines: 2,
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
                                                               ),
                                                             ),
                                                           ),

@@ -1255,6 +1255,10 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
     }
 
     // Show confirmation dialog with statistics input
+    final rawAge = alert['age'];
+    final initialAge =
+        rawAge is num ? rawAge.toInt() : int.tryParse(rawAge?.toString() ?? '');
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => _ResolveDialog(
@@ -1263,6 +1267,8 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
             alert['fisherman_first_name'] ??
             alert['fisherman_email'] ??
             'fisherman',
+        initialGender: alert['gender']?.toString(),
+        initialAge: initialAge,
       ),
     );
 
@@ -1295,6 +1301,9 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
         final injured = result['injured'] as int? ?? 0;
         final missing = result['missing'] as int? ?? 0;
         final totalOnboard = result['total_onboard'] as int? ?? 0;
+        final gender = result['gender'] as String?;
+        final age = result['age'] as int?;
+        final reasonOfDistress = result['reason_of_distress'] as String?;
 
         // Mark as inactive when resolved is clicked
         final success = await _databaseService.updateSOSAlertStatus(
@@ -1304,6 +1313,9 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
           injured: injured,
           missing: missing,
           totalOnboard: totalOnboard,
+          gender: gender,
+          age: age,
+          reasonOfDistress: reasonOfDistress,
         );
 
         if (success) {
@@ -1334,6 +1346,7 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
                 totalRescue: stats['totalRescue'] ?? 0,
                 casualties: stats['casualties'] ?? 0,
                 injured: stats['injured'] ?? 0,
+                averageAge: stats['averageAge'] ?? 0,
               ),
             );
           }
@@ -1514,14 +1527,27 @@ class _RescueNotificationsPageState extends State<RescueNotificationsPage> {
 // Resolve Dialog with statistics input
 class _ResolveDialog extends StatefulWidget {
   final String fishermanName;
+  final String? initialGender;
+  final int? initialAge;
 
-  const _ResolveDialog({required this.fishermanName});
+  const _ResolveDialog({
+    required this.fishermanName,
+    this.initialGender,
+    this.initialAge,
+  });
 
   @override
   State<_ResolveDialog> createState() => _ResolveDialogState();
 }
 
 class _ResolveDialogState extends State<_ResolveDialog> {
+  static const List<String> _genderOptions = [
+    'Male',
+    'Female',
+    'Other',
+    'Prefer not to say',
+  ];
+
   final TextEditingController _casualtiesController = TextEditingController(
     text: '0',
   );
@@ -1534,6 +1560,21 @@ class _ResolveDialogState extends State<_ResolveDialog> {
   final TextEditingController _totalOnboardController = TextEditingController(
     text: '0',
   );
+  final TextEditingController _ageController = TextEditingController();
+  final TextEditingController _reasonOfDistressController = TextEditingController();
+  String? _selectedGender;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialGender != null &&
+        _genderOptions.contains(widget.initialGender)) {
+      _selectedGender = widget.initialGender;
+    }
+    if (widget.initialAge != null && widget.initialAge! > 0) {
+      _ageController.text = widget.initialAge.toString();
+    }
+  }
 
   @override
   void dispose() {
@@ -1541,6 +1582,8 @@ class _ResolveDialogState extends State<_ResolveDialog> {
     _injuredController.dispose();
     _missingController.dispose();
     _totalOnboardController.dispose();
+    _ageController.dispose();
+    _reasonOfDistressController.dispose();
     super.dispose();
   }
 
@@ -1562,6 +1605,57 @@ class _ResolveDialogState extends State<_ResolveDialog> {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
+            const Text(
+              'Gender of Fisherman:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            DropdownButtonFormField<String>(
+              value: _selectedGender,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Select gender',
+              ),
+              items: _genderOptions
+                  .map(
+                    (gender) => DropdownMenuItem<String>(
+                      value: gender,
+                      child: Text(gender),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  _selectedGender = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Age of Fisherman:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            TextField(
+              controller: _ageController,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Enter age',
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reasonOfDistressController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Reason of Distress',
+                hintText: 'e.g. fever, muscle cramps, boat capsizing, engine failure, etc.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _casualtiesController,
               decoration: const InputDecoration(
@@ -1617,6 +1711,9 @@ class _ResolveDialogState extends State<_ResolveDialog> {
               'injured': int.tryParse(_injuredController.text) ?? 0,
               'missing': int.tryParse(_missingController.text) ?? 0,
               'total_onboard': int.tryParse(_totalOnboardController.text) ?? 0,
+              'gender': _selectedGender,
+              'age': int.tryParse(_ageController.text),
+              'reason_of_distress': _reasonOfDistressController.text.trim(),
             });
           },
           style: ElevatedButton.styleFrom(
@@ -1635,11 +1732,13 @@ class _RescueStatisticsDialog extends StatelessWidget {
   final int totalRescue;
   final int casualties;
   final int injured;
+  final int averageAge;
 
   const _RescueStatisticsDialog({
     required this.totalRescue,
     required this.casualties,
     required this.injured,
+    required this.averageAge,
   });
 
   @override
@@ -1666,6 +1765,8 @@ class _RescueStatisticsDialog extends StatelessWidget {
           _buildStatRow('Casualties/Dead', casualties.toString(), Colors.red),
           const SizedBox(height: 12),
           _buildStatRow('Injured', injured.toString(), Colors.orange),
+          const SizedBox(height: 12),
+          _buildStatRow('Average Age', averageAge > 0 ? '$averageAge years' : 'N/A', Colors.blue),
         ],
       ),
       actions: [
