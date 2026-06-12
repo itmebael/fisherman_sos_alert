@@ -67,6 +67,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/img/logo.png
+    - assets/img/bg.png
     - assets/img/cglogo.png
     - assets/img/coastguard.png
     - assets/img/fisherman_icon.svg

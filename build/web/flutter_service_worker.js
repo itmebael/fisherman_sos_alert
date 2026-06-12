@@ -3,9 +3,10 @@ const MANIFEST = 'flutter-app-manifest';
 const TEMP = 'flutter-temp-cache';
 const CACHE_NAME = 'flutter-app-cache';
 
-const RESOURCES = {"assets/AssetManifest.bin": "b10720c47daa128e1a38d4d8468b69e9",
-"assets/AssetManifest.bin.json": "b8ac532caa057e571a02c709bdadbf3c",
-"assets/AssetManifest.json": "9538d1d973cb3680e8327150e04e8a86",
+const RESOURCES = {"assets/AssetManifest.bin": "8935c7cb479eac0ed7cd828d546af928",
+"assets/AssetManifest.bin.json": "cd7429485a93c4273b5f016ce4531243",
+"assets/AssetManifest.json": "8171c4adae7fb885006374504d2463ae",
+"assets/assets/img/bg.png": "22dc73e02e70c8c8d2afda00cde6ccee",
 "assets/assets/img/cglogo.png": "5fb1050a709b30b297ec8266039a86fa",
 "assets/assets/img/coastguard.png": "bbdfecc4d212a09ee261cee5f68bc65a",
 "assets/assets/img/fisherman_icon.svg": "0a6d9dec7ce82100e2f09f0576ea08ce",
@@ -31,13 +32,13 @@ const RESOURCES = {"assets/AssetManifest.bin": "b10720c47daa128e1a38d4d8468b69e9
 "canvaskit/skwasm_st.wasm": "56c3973560dfcbf28ce47cebe40f3206",
 "favicon.png": "6cf580c2b52f6e2bd705e3c0f82b6898",
 "flutter.js": "76f08d47ff9f5715220992f993002504",
-"flutter_bootstrap.js": "7205ec50a091d6c3c1184a9f6f041a13",
+"flutter_bootstrap.js": "beff08ec1b95625794e393970bb9e274",
 "icons/Icon-192.png": "caec07e37c7d642ce668ce6753c30243",
 "icons/Icon-512.png": "9ed87560120c669048a2e99ec35cd34f",
 "icons/Icon-maskable-192.png": "caec07e37c7d642ce668ce6753c30243",
 "icons/Icon-maskable-512.png": "9ed87560120c669048a2e99ec35cd34f",
-"index.html": "956455a935e3e30307ab2bd8cafcb48e",
-"/": "956455a935e3e30307ab2bd8cafcb48e",
+"index.html": "727e7563abf6d4bc2fbe91fd0fa9e3ca",
+"/": "727e7563abf6d4bc2fbe91fd0fa9e3ca",
 "main.dart.js": "9eb8414182ad444e7758b3a435784337",
 "manifest.json": "ee5e5d5fa21f8065d18e38edbf21bca1",
 "version.json": "44d317402439775e7456353bc6b966e3"};
