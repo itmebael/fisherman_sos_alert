@@ -128,6 +128,7 @@ CREATE POLICY "Allow fishermen to view their own notifications" ON public.fisher
     );
 
 -- Allow service role to insert notifications
+DROP POLICY IF EXISTS "Allow service role to insert notifications" ON public.fisherman_notifications;
 CREATE POLICY "Allow service role to insert notifications" ON public.fisherman_notifications
     FOR INSERT 
     TO service_role 
@@ -147,6 +148,7 @@ CREATE POLICY "Allow fishermen to update their own notifications" ON public.fish
     );
 
 -- Allow anonymous users to view notifications by email (for anonymous SOS alerts)
+DROP POLICY IF EXISTS "Allow anonymous users to view notifications by email" ON public.fisherman_notifications;
 CREATE POLICY "Allow anonymous users to view notifications by email" ON public.fisherman_notifications
     FOR SELECT 
     TO anon 
@@ -626,9 +628,24 @@ ADD COLUMN IF NOT EXISTS missing INTEGER DEFAULT 0;
 ALTER TABLE public.sos_alerts 
 ADD COLUMN IF NOT EXISTS total_onboard INTEGER DEFAULT 0;
 
+-- Add gender column (gender of fisherman involved in the incident)
+ALTER TABLE public.sos_alerts
+ADD COLUMN IF NOT EXISTS gender text;
+
+-- Add age column (age of fisherman at time of incident)
+ALTER TABLE public.sos_alerts
+ADD COLUMN IF NOT EXISTS age integer;
+
+-- Add reason_of_distress column (reason/cause of the SOS)
+ALTER TABLE public.sos_alerts
+ADD COLUMN IF NOT EXISTS reason_of_distress text;
+
 -- Add comments for documentation
 COMMENT ON COLUMN public.sos_alerts.missing IS 'Number of missing persons in this emergency (unconfirmed status; still under search)';
 COMMENT ON COLUMN public.sos_alerts.total_onboard IS 'Total number of fishermen/passengers on the boat during the emergency';
+COMMENT ON COLUMN public.sos_alerts.gender IS 'Gender of the fisherman involved in the SOS incident. Captured when marking the alert as resolved.';
+COMMENT ON COLUMN public.sos_alerts.age IS 'Age of the fisherman at the time of the SOS incident. Captured when marking the alert as resolved.';
+COMMENT ON COLUMN public.sos_alerts.reason_of_distress IS 'Recorded reason/cause of distress (e.g. fever, muscle cramps, boat capsizing, other emergencies). Captured when marking the alert as resolved.';
 
 -- 15. Create Emergency Overview View
 -- =============================================
@@ -802,4 +819,42 @@ GRANT EXECUTE ON FUNCTION public.get_emergency_overview_by_status(text) TO authe
 -- =============================================
 -- END OF SCRIPT philippinecoastguard@2025 notify pop up phicoastguard@gmail.com profile-images
 -- =============================================
+
+-- 19. Create a dedicated database role for the admin
+-- NOTE: For production deployments, avoid hardcoding passwords in SQL files.
+-- Instead, inject the password from a secure secret store or CI/CD variable.
+-- The section below creates a login role named `phicoastguard_admin` using the
+-- credentials you provided. Replace the password or remove this block if you
+-- prefer creating the role via your database admin tools.
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'phicoastguard_admin') THEN
+        -- Creates a role that can be used to administrate notifications and related data
+        CREATE ROLE phicoastguard_admin LOGIN PASSWORD 'philippinecoastguard@2025';
+    END IF;
+END;
+$$;
+
+-- Grant privileges for the new role. Use dynamic SQL for database name resolution
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'phicoastguard_admin') THEN
+        EXECUTE format('GRANT CONNECT ON DATABASE %I TO phicoastguard_admin', current_database());
+        EXECUTE 'GRANT USAGE ON SCHEMA public TO phicoastguard_admin';
+        -- Grant permissions on existing objects used by notification flows
+        EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO phicoastguard_admin';
+        EXECUTE 'GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO phicoastguard_admin';
+
+        -- Ensure future objects also grant sensible defaults to this role
+        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO phicoastguard_admin';
+        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO phicoastguard_admin';
+    END IF;
+END;
+$$;
+
+-- Optional: if you want a role with the email as an identifier, create a separate role name
+-- e.g. "phicoastguard_email" but Postgres role names cannot contain '@'. We therefore
+-- create `phicoastguard_admin` and you can map it to your application identity (phicoastguard@gmail.com).
+
 

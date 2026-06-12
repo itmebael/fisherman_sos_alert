@@ -103,108 +103,82 @@ class _LoginScreenState extends State<LoginScreen> {
           final isWideScreen = screenWidth > 800;
           
           if (isWideScreen) {
-            // Desktop/Tablet layout - side by side
+            // Desktop/Tablet layout - split screen exactly in half
             return Row(
               children: [
-                // Left Section - Branding and Logo
+                // Left half: background image with overlay and branding
                 Expanded(
-                  flex: 1,
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppColors.primaryColor,
-                          AppColors.drawerColor,
-                        ],
-                      ),
-                    ),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Logo with modern glassmorphism effect
-                          Container(
-                            width: 200,
-                            height: 200,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.15),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 30,
-                                  offset: const Offset(0, 15),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.asset('assets/img/bg.png', fit: BoxFit.cover),
+                      Container(color: Colors.black.withOpacity(0.38)),
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 180,
+                                  height: 180,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.16),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white.withOpacity(0.22), width: 2),
+                                  ),
+                                  child: ClipOval(
+                                    child: Image.asset('assets/img/logo.png', fit: BoxFit.cover),
+                                  ),
                                 ),
-                                BoxShadow(
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, -5),
-                                ),
-                              ],
-                            ),
-                            child: ClipOval(
-                              child: Image.asset(
-                                'assets/img/logo.png',
-                                width: 200,
-                                height: 200,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 40),
-                          // App name with modern typography
-                          const Text(
-                            'Salbar Mangirisda',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: 1.2,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black26,
-                                  offset: Offset(0, 2),
-                                  blurRadius: 4,
+                                const SizedBox(width: 20),
+                                Container(
+                                  width: 180,
+                                  height: 180,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.16),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white.withOpacity(0.22), width: 2),
+                                  ),
+                                  child: ClipOval(
+                                    child: Image.asset('assets/img/cglogo.png', fit: BoxFit.cover),
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Maritime Safety Platform',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w300,
-                              color: Colors.white.withValues(alpha: 0.9),
-                              letterSpacing: 0.5,
+                            const SizedBox(height: 40),
+                            const Text(
+                              'Salbar Mangirisda',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 1.2,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 8),
+                            Text(
+                              'Maritime Safety Platform',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w300,
+                                color: Colors.white.withOpacity(0.9),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-                
-                // Right Section - Login Form
+
+                // Right half: solid white with login form
                 Expanded(
-                  flex: 1,
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 20,
-                          offset: const Offset(-5, 0),
-                        ),
-                      ],
-                    ),
+                    color: Colors.white,
                     child: SafeArea(
                       child: Padding(
                         padding: const EdgeInsets.all(50),
@@ -217,119 +191,110 @@ class _LoginScreenState extends State<LoginScreen> {
             );
           } else {
             // Mobile layout - stacked
-            return Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.primaryColor,
-                    AppColors.drawerColor,
-                  ],
-                ),
-              ),
-        child: SafeArea(
-                child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 60),
-                      
-                      // Logo section for mobile with glassmorphism
-                      Container(
-                        width: 140,
-                        height: 140,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.15),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            width: 2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              blurRadius: 30,
-                              offset: const Offset(0, 15),
-                            ),
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              blurRadius: 20,
-                              offset: const Offset(0, -5),
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: Image.asset(
-                            'assets/img/logo.png',
-                            width: 140,
-                            height: 140,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 30),
-                      
-                      // App name for mobile with modern typography
-                      const Text(
-                        'Salbar_Mangirisda',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          letterSpacing: 1.0,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black26,
-                              offset: Offset(0, 2),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Maritime Safety Platform',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w300,
-                          color: Colors.white.withValues(alpha: 0.9),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      
-                      const SizedBox(height: 50),
-                      
-                      // Login form for mobile with modern glassmorphism
-                      Container(
-                        padding: const EdgeInsets.all(32),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.95),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            width: 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              blurRadius: 30,
-                              offset: const Offset(0, 15),
-                            ),
-                            BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              blurRadius: 20,
-                              offset: const Offset(0, -5),
-                            ),
-                          ],
-                        ),
-                        child: _buildLoginForm(authProvider),
-                      ),
-                    ],
+                // Mobile layout - stacked with background image like splash
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/img/bg.png',
+                    fit: BoxFit.cover,
                   ),
                 ),
-              ),
+                Positioned.fill(
+                  child: Container(color: Colors.black.withOpacity(0.38)),
+                ),
+                SafeArea(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 60),
+
+                        // Logo section for mobile with two circular logos
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 130,
+                              height: 130,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.16),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withOpacity(0.22), width: 2),
+                              ),
+                              child: ClipOval(
+                                child: Image.asset(
+                                  'assets/img/logo.png',
+                                  width: 130,
+                                  height: 130,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 130,
+                              height: 130,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.16),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withOpacity(0.22), width: 2),
+                              ),
+                              child: ClipOval(
+                                child: Image.asset(
+                                  'assets/img/cglogo.png',
+                                  width: 130,
+                                  height: 130,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 30),
+
+                        // App name for mobile with modern typography
+                        const Text(
+                          'Salbar_Mangirisda',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Maritime Safety Platform',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w300,
+                            color: Colors.white.withOpacity(0.9),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+
+                        const SizedBox(height: 50),
+
+                        // Login form for mobile: remove heavy shadows to match splash
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.95),
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: _buildLoginForm(authProvider),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             );
           }
         },

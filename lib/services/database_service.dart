@@ -1315,15 +1315,15 @@ class DatabaseService {
   // Get total users count
   Future<int> getTotalUsersCount() async {
     return await _connectionService.executeWithRetry(() async {
+      // Count ALL fishermen (regardless of is_active status)
       final fishermen = await _supabase
           .from('fishermen')
-          .select('id')
-          .eq('is_active', true);
+          .select('id');
       
+      // Count ALL coastguards (regardless of is_active status)
       final coastguards = await _supabase
           .from('coastguards')
-          .select('id')
-          .eq('is_active', true);
+          .select('id');
       
       return fishermen.length + coastguards.length;
     });
