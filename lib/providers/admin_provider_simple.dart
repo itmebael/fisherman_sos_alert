@@ -27,7 +27,7 @@ class EmergencyStatPoint {
 
 class AdminProviderSimple with ChangeNotifier {
   final DatabaseService _databaseService = DatabaseService();
-  
+
   List<Map<String, dynamic>> _usersWithBoats = [];
   List<SOSAlertModel> _rescueNotifications = [];
   List<DeviceModel> _devices = [];
@@ -40,10 +40,16 @@ class AdminProviderSimple with ChangeNotifier {
   int _totalRescued = 0;
   int _activeSOSAlerts = 0;
   int _totalDevices = 0;
-  
+
   // Weekly rescue stats (Mon..Sun) - Keep for backward compatibility if needed, but we will use emergencyStats mainly
   Map<String, int> _weeklyRescueStats = {
-    'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0, 'Sun': 0,
+    'Mon': 0,
+    'Tue': 0,
+    'Wed': 0,
+    'Thu': 0,
+    'Fri': 0,
+    'Sat': 0,
+    'Sun': 0,
   };
 
   // New Emergency Overview Stats
@@ -52,7 +58,8 @@ class AdminProviderSimple with ChangeNotifier {
 
   // Getters
   List<Map<String, dynamic>> get usersWithBoats => _usersWithBoats;
-  List<UserModel> get users => _usersWithBoats.map((uwb) => UserModel.fromMap(uwb)).toList();
+  List<UserModel> get users =>
+      _usersWithBoats.map((uwb) => UserModel.fromMap(uwb)).toList();
   List<SOSAlertModel> get rescueNotifications => _rescueNotifications;
   List<DeviceModel> get devices => _devices;
   bool get isLoading => _isLoading;
@@ -65,7 +72,7 @@ class AdminProviderSimple with ChangeNotifier {
   int get activeSOSAlerts => _activeSOSAlerts;
   int get totalDevices => _totalDevices;
   Map<String, int> get weeklyRescueStats => _weeklyRescueStats;
-  
+
   List<EmergencyStatPoint> get emergencyStats => _emergencyStats;
   String get selectedTimeFilter => _selectedTimeFilter;
 
@@ -99,11 +106,7 @@ class AdminProviderSimple with ChangeNotifier {
       _totalRescued = results[2];
       _activeSOSAlerts = results[3];
       _totalDevices = results[4];
-      // TEMP: force 1 active SOS if none to display demo data on dashboard
-      if (_activeSOSAlerts == 0) {
-        _activeSOSAlerts = 1;
-      }
-      
+
       // Load stats
       await _loadWeeklyRescueStats();
       await loadEmergencyStats(filter: _selectedTimeFilter);
@@ -148,8 +151,9 @@ class AdminProviderSimple with ChangeNotifier {
       notifyListeners();
 
       final alerts = await _databaseService.getSOSAlerts();
-      _rescueNotifications = alerts.map((alert) => SOSAlertModel.fromJson(alert)).toList();
-      
+      _rescueNotifications =
+          alerts.map((alert) => SOSAlertModel.fromJson(alert)).toList();
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -230,7 +234,7 @@ class AdminProviderSimple with ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
   }
-  
+
   Future<void> _loadWeeklyRescueStats() async {
     try {
       // Fetch recent alerts and compute weekly stats (limit to 1000 to ensure we catch recent resolutions)
@@ -249,8 +253,9 @@ class AdminProviderSimple with ChangeNotifier {
       for (final alert in alerts) {
         final status = alert['status']?.toString().toLowerCase();
         // Include inactive, rescued, and resolved statuses
-        if (status != 'inactive' && status != 'rescued' && status != 'resolved') continue;
-        
+        if (status != 'inactive' && status != 'rescued' && status != 'resolved')
+          continue;
+
         final resolvedAtStr = alert['resolved_at']?.toString();
         final createdAtStr = alert['created_at']?.toString();
         DateTime? ts;
@@ -260,7 +265,8 @@ class AdminProviderSimple with ChangeNotifier {
         ts ??= createdAtStr != null ? DateTime.tryParse(createdAtStr) : null;
         if (ts == null) continue;
         // Only include last 7 days (including today)
-        final isInRange = !ts.isBefore(DateTime(start.year, start.month, start.day)) &&
+        final isInRange =
+            !ts.isBefore(DateTime(start.year, start.month, start.day)) &&
             !ts.isAfter(DateTime(now.year, now.month, now.day, 23, 59, 59));
         if (!isInRange) continue;
         final weekday = ts.weekday; // 1=Mon ... 7=Sun
@@ -291,30 +297,43 @@ class AdminProviderSimple with ChangeNotifier {
       // Fetch alerts
       final alerts = await _databaseService.getAllSOSAlerts(limit: 2000);
       final now = DateTime.now();
-      
+
       List<EmergencyStatPoint> stats = [];
 
       if (filter == 'Daily') {
         // Show days of the current week: Monday, Tuesday, Wednesday, etc.
         stats = [];
-        
+
         // Calculate current week boundaries (Monday to Sunday)
         final daysFromMonday = now.weekday - 1;
-        final weekStart = DateTime(now.year, now.month, now.day).subtract(Duration(days: daysFromMonday));
-        final weekEnd = weekStart.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
-        
+        final weekStart = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(Duration(days: daysFromMonday));
+        final weekEnd = weekStart.add(
+          const Duration(days: 6, hours: 23, minutes: 59, seconds: 59),
+        );
+
         // Initialize all days of the week
         final Map<int, Map<String, int>> dayBuckets = {};
         for (int day = 1; day <= 7; day++) {
-          dayBuckets[day] = {'sos': 0, 'injured': 0, 'casualty': 0, 'rescued': 0, 'missing': 0, 'total_onboard': 0};
+          dayBuckets[day] = {
+            'sos': 0,
+            'injured': 0,
+            'casualty': 0,
+            'rescued': 0,
+            'missing': 0,
+            'total_onboard': 0,
+          };
         }
 
         for (final alert in alerts) {
           final created = DateTime.parse(alert['created_at'].toString());
-          
+
           // Only include alerts from the current week
           if (created.isBefore(weekStart) || created.isAfter(weekEnd)) continue;
-          
+
           final weekday = created.weekday; // 1=Monday, 7=Sunday
           _aggregateAlertToBucket(dayBuckets[weekday]!, alert);
         }
@@ -322,42 +341,65 @@ class AdminProviderSimple with ChangeNotifier {
         // Add stats in order: Mon, Tue, Wed, Thu, Fri, Sat, Sun
         for (int day = 1; day <= 7; day++) {
           final dayLabel = _getDayLabel(day);
-          stats.add(EmergencyStatPoint(
-            label: dayLabel,
-            sosCount: dayBuckets[day]!['sos']!,
-            injuredCount: dayBuckets[day]!['injured']!,
-            casualtyCount: dayBuckets[day]!['casualty']!,
-            rescuedCount: dayBuckets[day]!['rescued']!,
-            missingCount: dayBuckets[day]!['missing']!,
-            totalOnboardCount: dayBuckets[day]!['total_onboard']!,
-          ));
+          stats.add(
+            EmergencyStatPoint(
+              label: dayLabel,
+              sosCount: dayBuckets[day]!['sos']!,
+              injuredCount: dayBuckets[day]!['injured']!,
+              casualtyCount: dayBuckets[day]!['casualty']!,
+              rescuedCount: dayBuckets[day]!['rescued']!,
+              missingCount: dayBuckets[day]!['missing']!,
+              totalOnboardCount: dayBuckets[day]!['total_onboard']!,
+            ),
+          );
         }
-
       } else if (filter == 'Weekly') {
         // Show Week 1, Week 2, Week 3, etc. (last 4-8 weeks)
         stats = [];
         final int numberOfWeeks = 8; // Show last 8 weeks
-        
+
         for (int i = numberOfWeeks - 1; i >= 0; i--) {
           // Calculate week boundaries
           final weekEnd = now.subtract(Duration(days: i * 7));
           final weekStart = weekEnd.subtract(const Duration(days: 6));
-          
-          // Set to start and end of day
-          final weekStartDay = DateTime(weekStart.year, weekStart.month, weekStart.day);
-          final weekEndDay = DateTime(weekEnd.year, weekEnd.month, weekEnd.day, 23, 59, 59);
 
-          int sos = 0, injured = 0, casualty = 0, rescued = 0, missing = 0, totalOnboard = 0;
+          // Set to start and end of day
+          final weekStartDay = DateTime(
+            weekStart.year,
+            weekStart.month,
+            weekStart.day,
+          );
+          final weekEndDay = DateTime(
+            weekEnd.year,
+            weekEnd.month,
+            weekEnd.day,
+            23,
+            59,
+            59,
+          );
+
+          int sos = 0,
+              injured = 0,
+              casualty = 0,
+              rescued = 0,
+              missing = 0,
+              totalOnboard = 0;
 
           for (final alert in alerts) {
             final created = DateTime.parse(alert['created_at'].toString());
             // Check if alert is within this week
-            if (created.isAfter(weekStartDay.subtract(const Duration(seconds: 1))) && 
+            if (created.isAfter(
+                  weekStartDay.subtract(const Duration(seconds: 1)),
+                ) &&
                 created.isBefore(weekEndDay.add(const Duration(seconds: 1)))) {
               sos++;
-              final status = alert['status']?.toString().toLowerCase() ?? 'active';
-              if (status == 'rescued' || status == 'resolved' || status == 'inactive') rescued++;
-              
+              final status =
+                  alert['status']?.toString().toLowerCase() ?? 'active';
+              if (status == 'rescued' ||
+                  status == 'resolved' ||
+                  status == 'inactive')
+                rescued++;
+
               injured += (alert['injured'] as int? ?? 0);
               casualty += (alert['casualties'] as int? ?? 0);
               missing += (alert['missing'] as int? ?? 0);
@@ -365,17 +407,18 @@ class AdminProviderSimple with ChangeNotifier {
             }
           }
 
-          stats.add(EmergencyStatPoint(
-            label: 'Week ${numberOfWeeks - i}',
-            sosCount: sos,
-            injuredCount: injured,
-            casualtyCount: casualty,
-            rescuedCount: rescued,
-            missingCount: missing,
-            totalOnboardCount: totalOnboard,
-          ));
+          stats.add(
+            EmergencyStatPoint(
+              label: 'Week ${numberOfWeeks - i}',
+              sosCount: sos,
+              injuredCount: injured,
+              casualtyCount: casualty,
+              rescuedCount: rescued,
+              missingCount: missing,
+              totalOnboardCount: totalOnboard,
+            ),
+          );
         }
-
       } else if (filter == 'Monthly') {
         // Show months: January, February, March, etc. (last 12 months)
         stats = [];
@@ -391,88 +434,125 @@ class AdminProviderSimple with ChangeNotifier {
             targetMonth -= 12;
             targetYear += 1;
           }
-          
+
           final monthStart = DateTime(targetYear, targetMonth, 1);
-          final monthEnd = targetMonth == 12 
-              ? DateTime(targetYear + 1, 1, 1).subtract(const Duration(seconds: 1))
-              : DateTime(targetYear, targetMonth + 1, 1).subtract(const Duration(seconds: 1));
-          
+          final monthEnd =
+              targetMonth == 12
+                  ? DateTime(
+                    targetYear + 1,
+                    1,
+                    1,
+                  ).subtract(const Duration(seconds: 1))
+                  : DateTime(
+                    targetYear,
+                    targetMonth + 1,
+                    1,
+                  ).subtract(const Duration(seconds: 1));
+
           final monthLabel = _getMonthLabel(targetMonth);
-          
-          int sos = 0, injured = 0, casualty = 0, rescued = 0, missing = 0, totalOnboard = 0;
+
+          int sos = 0,
+              injured = 0,
+              casualty = 0,
+              rescued = 0,
+              missing = 0,
+              totalOnboard = 0;
 
           for (final alert in alerts) {
             final created = DateTime.parse(alert['created_at'].toString());
             // Check if alert is within this month
-            if (created.isAfter(monthStart.subtract(const Duration(seconds: 1))) && 
+            if (created.isAfter(
+                  monthStart.subtract(const Duration(seconds: 1)),
+                ) &&
                 created.isBefore(monthEnd.add(const Duration(seconds: 1)))) {
               sos++;
-              final status = alert['status']?.toString().toLowerCase() ?? 'active';
-              if (status == 'rescued' || status == 'resolved' || status == 'inactive') rescued++;
-              
+              final status =
+                  alert['status']?.toString().toLowerCase() ?? 'active';
+              if (status == 'rescued' ||
+                  status == 'resolved' ||
+                  status == 'inactive')
+                rescued++;
+
               injured += (alert['injured'] as int? ?? 0);
               casualty += (alert['casualties'] as int? ?? 0);
               missing += (alert['missing'] as int? ?? 0);
               totalOnboard += (alert['total_onboard'] as int? ?? 0);
             }
           }
-          
-          stats.add(EmergencyStatPoint(
-            label: monthLabel,
-            sosCount: sos,
-            injuredCount: injured,
-            casualtyCount: casualty,
-            rescuedCount: rescued,
-            missingCount: missing,
-            totalOnboardCount: totalOnboard,
-          ));
-        }
 
+          stats.add(
+            EmergencyStatPoint(
+              label: monthLabel,
+              sosCount: sos,
+              injuredCount: injured,
+              casualtyCount: casualty,
+              rescuedCount: rescued,
+              missingCount: missing,
+              totalOnboardCount: totalOnboard,
+            ),
+          );
+        }
       } else if (filter == 'Yearly') {
         // Show years: 2023, 2024, 2025, etc. (from 2023 to current year)
         stats = [];
         final int startYear = 2023;
         final int currentYear = now.year;
         final int numberOfYears = currentYear - startYear + 1;
-        
+
         for (int i = 0; i < numberOfYears; i++) {
           final targetYear = startYear + i;
           final yearStart = DateTime(targetYear, 1, 1);
-          final yearEnd = DateTime(targetYear + 1, 1, 1).subtract(const Duration(seconds: 1));
-          
-          int sos = 0, injured = 0, casualty = 0, rescued = 0, missing = 0, totalOnboard = 0;
+          final yearEnd = DateTime(
+            targetYear + 1,
+            1,
+            1,
+          ).subtract(const Duration(seconds: 1));
+
+          int sos = 0,
+              injured = 0,
+              casualty = 0,
+              rescued = 0,
+              missing = 0,
+              totalOnboard = 0;
 
           for (final alert in alerts) {
             final created = DateTime.parse(alert['created_at'].toString());
             // Check if alert is within this year
-            if (created.isAfter(yearStart.subtract(const Duration(seconds: 1))) && 
+            if (created.isAfter(
+                  yearStart.subtract(const Duration(seconds: 1)),
+                ) &&
                 created.isBefore(yearEnd.add(const Duration(seconds: 1)))) {
               sos++;
-              final status = alert['status']?.toString().toLowerCase() ?? 'active';
-              if (status == 'rescued' || status == 'resolved' || status == 'inactive') rescued++;
-              
+              final status =
+                  alert['status']?.toString().toLowerCase() ?? 'active';
+              if (status == 'rescued' ||
+                  status == 'resolved' ||
+                  status == 'inactive')
+                rescued++;
+
               injured += (alert['injured'] as int? ?? 0);
               casualty += (alert['casualties'] as int? ?? 0);
               missing += (alert['missing'] as int? ?? 0);
               totalOnboard += (alert['total_onboard'] as int? ?? 0);
             }
           }
-          
-          stats.add(EmergencyStatPoint(
-            label: targetYear.toString(),
-            sosCount: sos,
-            injuredCount: injured,
-            casualtyCount: casualty,
-            rescuedCount: rescued,
-            missingCount: missing,
-            totalOnboardCount: totalOnboard,
-          ));
+
+          stats.add(
+            EmergencyStatPoint(
+              label: targetYear.toString(),
+              sosCount: sos,
+              injuredCount: injured,
+              casualtyCount: casualty,
+              rescuedCount: rescued,
+              missingCount: missing,
+              totalOnboardCount: totalOnboard,
+            ),
+          );
         }
       }
 
       _emergencyStats = stats;
       notifyListeners();
-
     } catch (e) {
       if (kDebugMode) {
         print('Error loading emergency stats: $e');
@@ -480,34 +560,62 @@ class AdminProviderSimple with ChangeNotifier {
     }
   }
 
-  void _aggregateAlertToBucket(Map<String, int> bucket, Map<String, dynamic> alert) {
+  void _aggregateAlertToBucket(
+    Map<String, int> bucket,
+    Map<String, dynamic> alert,
+  ) {
     bucket['sos'] = (bucket['sos'] ?? 0) + 1;
     final status = alert['status']?.toString().toLowerCase() ?? 'active';
     if (status == 'rescued' || status == 'resolved' || status == 'inactive') {
       bucket['rescued'] = (bucket['rescued'] ?? 0) + 1;
     }
-    
-    bucket['injured'] = (bucket['injured'] ?? 0) + (alert['injured'] as int? ?? 0);
-    bucket['casualty'] = (bucket['casualty'] ?? 0) + (alert['casualties'] as int? ?? 0);
-    bucket['missing'] = (bucket['missing'] ?? 0) + (alert['missing'] as int? ?? 0);
-    bucket['total_onboard'] = (bucket['total_onboard'] ?? 0) + (alert['total_onboard'] as int? ?? 0);
+
+    bucket['injured'] =
+        (bucket['injured'] ?? 0) + (alert['injured'] as int? ?? 0);
+    bucket['casualty'] =
+        (bucket['casualty'] ?? 0) + (alert['casualties'] as int? ?? 0);
+    bucket['missing'] =
+        (bucket['missing'] ?? 0) + (alert['missing'] as int? ?? 0);
+    bucket['total_onboard'] =
+        (bucket['total_onboard'] ?? 0) + (alert['total_onboard'] as int? ?? 0);
   }
 
   String _getDayLabel(int weekday) {
     switch (weekday) {
-      case 1: return 'Mon';
-      case 2: return 'Tue';
-      case 3: return 'Wed';
-      case 4: return 'Thu';
-      case 5: return 'Fri';
-      case 6: return 'Sat';
-      case 7: return 'Sun';
-      default: return '';
+      case 1:
+        return 'Mon';
+      case 2:
+        return 'Tue';
+      case 3:
+        return 'Wed';
+      case 4:
+        return 'Thu';
+      case 5:
+        return 'Fri';
+      case 6:
+        return 'Sat';
+      case 7:
+        return 'Sun';
+      default:
+        return '';
     }
   }
 
   String _getMonthLabel(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return months[(month - 1) % 12];
   }
 
@@ -519,7 +627,7 @@ class AdminProviderSimple with ChangeNotifier {
       notifyListeners();
 
       final authService = AuthService();
-      
+
       // Get form data
       final firstName = userData['first_name'] ?? '';
       final middleName = userData['middle_name'] ?? '';
@@ -529,29 +637,35 @@ class AdminProviderSimple with ChangeNotifier {
       // Extract boat information
       final boatNumber = userData['boat_number']?.toString() ?? '';
       final boatType = userData['boat_type']?.toString() ?? '';
-      final boatRegistrationNumber = userData['registration_number']?.toString() ?? '';
-      
+      final boatRegistrationNumber =
+          userData['registration_number']?.toString() ?? '';
+
       final success = await authService.registerBoatAndFisherman(
         email: userData['email'] ?? '',
         password: userData['password'] ?? '',
         firstName: firstName,
         lastName: lastName,
-        middleName: middleName.toString().isNotEmpty ? middleName.toString() : null,
+        middleName:
+            middleName.toString().isNotEmpty ? middleName.toString() : null,
         phone: userData['phone'] ?? '',
-        boatName: boatNumber.isNotEmpty ? boatNumber : 'Boat-${DateTime.now().millisecondsSinceEpoch}',
+        boatName:
+            boatNumber.isNotEmpty
+                ? boatNumber
+                : 'Boat-${DateTime.now().millisecondsSinceEpoch}',
         boatType: boatType,
         boatRegistrationNumber: boatRegistrationNumber,
         boatCapacity: '0',
         profileImageUrl: userData['profile_image_url']?.toString(),
         address: userData['address']?.toString(),
         fishingArea: userData['fishing_area']?.toString(),
-        emergencyContactPerson: userData['emergency_contact_person']?.toString(),
+        emergencyContactPerson:
+            userData['emergency_contact_person']?.toString(),
       );
 
       if (!success) {
         throw Exception('Failed to create user');
       }
-      
+
       // Reload users to include the new one
       await loadUsersWithBoats();
     } catch (e) {
@@ -584,14 +698,16 @@ class AdminProviderSimple with ChangeNotifier {
       // Prepare fisherman data including boat information (denormalized)
       final fishermanData = {
         'first_name': firstName,
-        'middle_name': middleName.toString().isNotEmpty ? middleName.toString() : null,
+        'middle_name':
+            middleName.toString().isNotEmpty ? middleName.toString() : null,
         'last_name': lastName,
         'name': fullName,
         'email': userData['email'] ?? '',
         'phone': userData['phone'] ?? '',
         'address': userData['address']?.toString(),
         'fishing_area': userData['fishing_area']?.toString(),
-        'emergency_contact_person': userData['emergency_contact_person']?.toString(),
+        'emergency_contact_person':
+            userData['emergency_contact_person']?.toString(),
         'is_active': userData['is_active'] ?? true,
         // Profile image URL - ensure it's saved
         'profile_image_url': userData['profile_image_url']?.toString(),
@@ -602,8 +718,11 @@ class AdminProviderSimple with ChangeNotifier {
       };
 
       // Update fisherman (includes boat info)
-      final success = await _databaseService.updateFisherman(userId, fishermanData);
-      
+      final success = await _databaseService.updateFisherman(
+        userId,
+        fishermanData,
+      );
+
       if (!success) {
         throw Exception('Failed to update user');
       }
@@ -611,18 +730,21 @@ class AdminProviderSimple with ChangeNotifier {
       // Also update boat table to keep it in sync
       final boatNumber = userData['boat_number']?.toString();
       final boatType = userData['boat_type']?.toString();
-      final boatRegistrationNumber = userData['registration_number']?.toString();
-      
-      if (boatNumber != null || boatType != null || boatRegistrationNumber != null) {
+      final boatRegistrationNumber =
+          userData['registration_number']?.toString();
+
+      if (boatNumber != null ||
+          boatType != null ||
+          boatRegistrationNumber != null) {
         final boatData = {
           'boat_number': boatNumber,
           'boat_type': boatType,
           'registration_number': boatRegistrationNumber,
         };
-        
+
         await _databaseService.createOrUpdateBoatForFisherman(userId, boatData);
       }
-      
+
       // Reload users to reflect changes
       await loadUsersWithBoats();
     } catch (e) {
@@ -645,7 +767,7 @@ class AdminProviderSimple with ChangeNotifier {
       // This would typically call a service method to toggle status
       // For now, we'll simulate the toggle
       await Future.delayed(const Duration(seconds: 1));
-      
+
       // Reload users to reflect changes
       await loadUsersWithBoats();
     } catch (e) {
@@ -667,13 +789,10 @@ class AdminProviderSimple with ChangeNotifier {
       notifyListeners();
 
       // Find the user in the list
-      final userWithBoat = _usersWithBoats.firstWhere(
-        (uwb) {
-          final uid = uwb['user_id']?.toString() ?? uwb['id']?.toString();
-          return uid == userId;
-        },
-        orElse: () => {},
-      );
+      final userWithBoat = _usersWithBoats.firstWhere((uwb) {
+        final uid = uwb['user_id']?.toString() ?? uwb['id']?.toString();
+        return uid == userId;
+      }, orElse: () => {});
 
       if (userWithBoat.isEmpty) {
         throw Exception('User not found');
@@ -714,7 +833,7 @@ class AdminProviderSimple with ChangeNotifier {
       // Get devices from database
       final deviceData = await _databaseService.getDevices();
       _devices = deviceData.map((data) => DeviceModel.fromMap(data)).toList();
-      
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -734,10 +853,10 @@ class AdminProviderSimple with ChangeNotifier {
       // Add device to database
       final deviceData = device.toMap();
       await _databaseService.addDevice(deviceData);
-      
+
       // Reload devices to get updated list
       await loadDevices();
-      
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -758,10 +877,10 @@ class AdminProviderSimple with ChangeNotifier {
       // Update device in database
       final deviceData = device.toMap();
       await _databaseService.updateDevice(device.id, deviceData);
-      
+
       // Reload devices to get updated list
       await loadDevices();
-      
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -781,10 +900,10 @@ class AdminProviderSimple with ChangeNotifier {
 
       // Delete device from database
       await _databaseService.deleteDevice(deviceId);
-      
+
       // Reload devices to get updated list
       await loadDevices();
-      
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -804,10 +923,10 @@ class AdminProviderSimple with ChangeNotifier {
 
       // Toggle device status in database
       await _databaseService.toggleDeviceStatus(deviceId, isActive);
-      
+
       // Reload devices to get updated list
       await loadDevices();
-      
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -827,10 +946,10 @@ class AdminProviderSimple with ChangeNotifier {
 
       // Stop device signal in database
       await _databaseService.stopDeviceSignal(deviceId);
-      
+
       // Reload devices to get updated list
       await loadDevices();
-      
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -840,5 +959,4 @@ class AdminProviderSimple with ChangeNotifier {
       rethrow;
     }
   }
-
 }

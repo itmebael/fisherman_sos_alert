@@ -30,16 +30,23 @@ void main() async {
     print('   ✗ Fishermen table not accessible\n');
   }
 
-  // Test 3: Create a test fisherman
-  print('3. Creating test fisherman...');
+  // Test 3: Create or retrieve a test fisherman
+  print('3. Creating or retrieving test fisherman...');
   try {
-    final fishermanId = await databaseService.createFisherman(
-      email: 'test@example.com',
-      firstName: 'Test',
-      lastName: 'Fisherman',
-      phone: '1234567890',
-    );
-    print('   ✓ Test fisherman created with ID: $fishermanId\n');
+    String fishermanId;
+    final existingFisherman = await databaseService.getFishermanByEmail('test@example.com');
+    if (existingFisherman != null) {
+      fishermanId = existingFisherman['id'];
+      print('   ✓ Test fisherman already exists with ID: $fishermanId\n');
+    } else {
+      fishermanId = await databaseService.createFisherman(
+        email: 'test@example.com',
+        firstName: 'Test',
+        lastName: 'Fisherman',
+        phone: '1234567890',
+      );
+      print('   ✓ Test fisherman created with ID: $fishermanId\n');
+    }
 
     // Test 4: Create SOS alert with the test fisherman
     print('4. Creating test SOS alert...');
@@ -62,7 +69,7 @@ void main() async {
     print('   ✓ Found ${alerts.length} SOS alerts');
     for (var alert in alerts) {
       print('   - ID: ${alert['id']}');
-      print('   - Fisherman ID: ${alert['fisherman_id']}');
+      print('   - Fisherman ID: ${alert['fisherman_uid']}');
       print('   - Location: ${alert['latitude']}, ${alert['longitude']}');
       print('   - Status: ${alert['status']}');
       print('   - Created: ${alert['created_at']}\n');
@@ -74,36 +81,3 @@ void main() async {
 
   print('=== Debug Complete ===');
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
